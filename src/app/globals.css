@@ -1,0 +1,328 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap");
+
+:root {
+  --bg-canvas: #f4f8f8;
+  --surface-strong: rgba(255, 255, 255, 0.92);
+  --surface: rgba(255, 255, 255, 0.75);
+  --surface-muted: #eef5f4;
+
+  --text-main: #142432;
+  --text-muted: #536677;
+
+  --accent: #0f766e;
+  --accent-strong: #115e59;
+  --accent-soft: rgba(15, 118, 110, 0.12);
+  --accent-alt: #ea580c;
+
+  --success: #15803d;
+  --warning: #b45309;
+  --danger: #be123c;
+
+  --border-color: rgba(20, 36, 50, 0.14);
+  --shadow-soft: 0 18px 40px rgba(12, 24, 36, 0.08);
+
+  --sidebar-width: 300px;
+  --radius-lg: 20px;
+  --radius-md: 14px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  max-width: 100%;
+  min-height: 100%;
+  color: var(--text-main);
+  background: var(--bg-canvas);
+  font-family: "Manrope", "Segoe UI", sans-serif;
+}
+
+body {
+  position: relative;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image:
+    linear-gradient(rgba(15, 118, 110, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 118, 110, 0.08) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: radial-gradient(circle at center, black 38%, transparent 90%);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: "Space Grotesk", "Manrope", sans-serif;
+  letter-spacing: -0.02em;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+textarea,
+input,
+select {
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-main);
+  outline: none;
+}
+
+textarea:focus,
+input:focus,
+select:focus {
+  border-color: rgba(15, 118, 110, 0.48);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 11px;
+  border: 1px solid transparent;
+  font-size: 0.88rem;
+  font-weight: 700;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btnPrimary {
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  box-shadow: 0 8px 18px rgba(15, 118, 110, 0.25);
+}
+
+.btnSecondary {
+  color: var(--text-main);
+  background: #fff;
+  border-color: var(--border-color);
+}
+
+.btnDanger {
+  color: #fff;
+  background: linear-gradient(135deg, #e11d48, #be123c);
+}
+
+.btnGhost {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(20, 36, 50, 0.1);
+}
+
+.pageShell {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+}
+
+.pageShell:fullscreen,
+.pageShell.toolFullscreen {
+  width: 100vw;
+  height: 100dvh;
+  min-height: 100dvh;
+  max-width: none;
+  padding: 14px;
+  overflow: auto;
+  background: var(--bg-canvas);
+}
+
+.toolHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.toolTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toolIconBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.toolTitle {
+  font-size: clamp(1.45rem, 2.2vw, 1.95rem);
+  font-weight: 700;
+}
+
+.toolSubtitle {
+  margin-top: 4px;
+  max-width: 760px;
+  color: var(--text-muted);
+  font-size: 0.93rem;
+}
+
+.toolMetaRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.statusChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  border: 1px solid rgba(20, 36, 50, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.panel {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-soft);
+}
+
+.panelInset {
+  border: 1px solid rgba(20, 36, 50, 0.08);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.toolbarRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.textInput {
+  min-height: 38px;
+  padding: 0 12px;
+}
+
+.textareaField {
+  width: 100%;
+  min-height: 220px;
+  padding: 14px;
+  resize: vertical;
+  line-height: 1.5;
+  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-size: 0.9rem;
+}
+
+.helperText {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(20, 36, 50, 0.2);
+  background: rgba(255, 255, 255, 0.85);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.7rem;
+}
+
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-enter {
+  animation: fadeSlideIn 0.35s ease forwards;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(20, 36, 50, 0.2);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(20, 36, 50, 0.35);
+}
+
+@media (max-width: 960px) {
+  .toolMetaRow {
+    gap: 6px;
+  }
+
+  .statusChip {
+    font-size: 0.76rem;
+  }
+}

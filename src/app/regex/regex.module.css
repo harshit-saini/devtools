@@ -1,0 +1,165 @@
+.container {
+  height: 100%;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.notice {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  background: rgba(15, 118, 110, 0.14);
+  color: var(--accent-strong);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.error {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(190, 18, 60, 0.24);
+  background: rgba(190, 18, 60, 0.12);
+  color: var(--danger);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.patternCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+}
+
+.label {
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.patternInput {
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(20, 36, 50, 0.1);
+  background: rgba(255, 255, 255, 0.88);
+  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-size: 0.88rem;
+}
+
+.flagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.flagToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(20, 36, 50, 0.14);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+
+.block h3 {
+  font-size: 1rem;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 170px;
+  border: 1px solid rgba(20, 36, 50, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.88);
+  padding: 12px;
+  resize: vertical;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  font-family: "IBM Plex Mono", Consolas, monospace;
+}
+
+.replacementInput {
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(20, 36, 50, 0.1);
+  background: rgba(255, 255, 255, 0.88);
+  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-size: 0.84rem;
+}
+
+.matchBlock {
+  padding: 12px;
+}
+
+.matchBlock h3 {
+  margin-bottom: 10px;
+  font-size: 1rem;
+}
+
+.matchList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.matchItem {
+  border: 1px solid rgba(20, 36, 50, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 10px;
+}
+
+.matchValue {
+  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-size: 0.86rem;
+  margin-bottom: 5px;
+}
+
+.matchMeta {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.emptyText {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 980px) {
+  .actions {
+    justify-content: flex-start;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

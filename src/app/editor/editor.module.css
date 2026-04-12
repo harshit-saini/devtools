@@ -1,0 +1,72 @@
+.container {
+  height: 100%;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.languageSelect {
+  min-width: 156px;
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: 11px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.94);
+  font-size: 0.88rem;
+}
+
+.fontSizeWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(20, 36, 50, 0.14);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.fontSizeInput {
+  width: 86px;
+}
+
+.notice {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  background: rgba(15, 118, 110, 0.14);
+  color: var(--accent-strong);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.editorCard {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 10px;
+}
+
+.loading {
+  padding: 16px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 800px) {
+  .actions {
+    justify-content: flex-start;
+  }
+
+  .languageSelect {
+    width: 100%;
+  }
+}

@@ -1,0 +1,50 @@
+.appContainer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-height: 100dvh;
+}
+
+.mainContent {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: clamp(16px, 2.2vw, 30px);
+}
+
+.mainContent::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.38) 0%, rgba(255, 255, 255, 0) 25%);
+  pointer-events: none;
+}
+
+.mainContent > * {
+  position: relative;
+  z-index: 1;
+}
+
+.backgroundAura {
+  position: fixed;
+  inset: -30%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(14, 165, 145, 0.2), transparent 32%),
+    radial-gradient(circle at 86% 16%, rgba(249, 115, 22, 0.2), transparent 30%),
+    radial-gradient(circle at 55% 88%, rgba(37, 99, 235, 0.14), transparent 38%);
+  filter: blur(2px);
+}
+
+@media (max-width: 960px) {
+  .appContainer {
+    flex-direction: column;
+  }
+
+  .mainContent {
+    padding: 16px;
+  }
+}
