@@ -1,0 +1,171 @@
+.container {
+  height: 100%;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.sizeWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: 11px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.sizeWrap select {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-main);
+  min-height: 28px;
+}
+
+.notice {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  background: rgba(15, 118, 110, 0.14);
+  color: var(--accent-strong);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.error {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(190, 18, 60, 0.24);
+  background: rgba(190, 18, 60, 0.12);
+  color: var(--danger);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.inputCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.label {
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.inputRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.urlInput {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(20, 36, 50, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.88);
+  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-size: 0.9rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+}
+
+.previewCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.previewCard h3,
+.detailsCard h3 {
+  font-size: 1rem;
+}
+
+.previewStage {
+  flex: 1;
+  min-height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed rgba(20, 36, 50, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 18px;
+}
+
+.qrImage {
+  width: min(100%, 420px);
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 12px 24px rgba(20, 36, 50, 0.12);
+}
+
+.detailsCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+.generatedUrl {
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(20, 36, 50, 0.1);
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--text-main);
+  font-size: 0.85rem;
+  font-family: "IBM Plex Mono", Consolas, monospace;
+  line-height: 1.45;
+  word-break: break-all;
+}
+
+.tip {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.emptyText {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 1080px) {
+  .actions {
+    justify-content: flex-start;
+  }
+
+  .inputRow {
+    grid-template-columns: 1fr;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .previewStage {
+    min-height: 260px;
+  }
+}

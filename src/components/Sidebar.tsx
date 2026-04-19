@@ -14,6 +14,7 @@ import {
   KeyRound,
   NotebookPen,
   PencilRuler,
+  QrCode,
   Regex,
   Search,
   Table2,
@@ -34,6 +35,7 @@ const navItems: NavItem[] = [
   { name: "Notepad", href: "/notepad", group: "Create", icon: NotebookPen },
   { name: "Code Editor", href: "/editor", group: "Create", icon: Code2 },
   { name: "Drawing Pad", href: "/draw", group: "Create", icon: PencilRuler },
+  { name: "QR Generator", href: "/qr", group: "Create", icon: QrCode },
 
   { name: "Diff Tool", href: "/diff", group: "Analyze", icon: FileDiff },
   { name: "CSV Viewer", href: "/csv", group: "Analyze", icon: Table2 },

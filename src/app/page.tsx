@@ -10,6 +10,7 @@ import {
   KeyRound,
   NotebookPen,
   PencilRuler,
+  QrCode,
   Regex,
   Search,
   Table2,
@@ -49,6 +50,14 @@ const tools: ToolCard[] = [
     category: "Create",
     icon: PencilRuler,
     highlights: ["Excalidraw", "Scene save"],
+  },
+  {
+    name: "QR Generator",
+    description: "Turn URLs into downloadable QR codes for quick sharing and mobile testing.",
+    href: "/qr",
+    category: "Create",
+    icon: QrCode,
+    highlights: ["PNG export", "Local-only"],
   },
   {
     name: "Diff Tool",
