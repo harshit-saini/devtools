@@ -42,6 +42,64 @@
   padding: 10px;
 }
 
+.validationBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.validationGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.86rem;
+}
+
+.fieldLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.textInput {
+  width: 100%;
+  border: 1px solid rgba(20, 36, 50, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 8px 10px;
+  font-size: 0.84rem;
+}
+
+.validationList {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.84rem;
+}
+
+.validationok {
+  color: var(--ok, #0f766e);
+}
+
+.validationwarn {
+  color: #b45309;
+}
+
+.validationerror {
+  color: var(--danger);
+}
+
 .label {
   font-size: 0.86rem;
   color: var(--text-muted);
@@ -117,6 +175,10 @@
   }
 
   .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .validationGrid {
     grid-template-columns: 1fr;
   }
 }
