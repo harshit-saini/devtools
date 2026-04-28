@@ -7,6 +7,7 @@ import {
   Braces,
   Code2,
   FileDiff,
+  FileText,
   KeyRound,
   NotebookPen,
   PencilRuler,
@@ -58,6 +59,14 @@ const tools: ToolCard[] = [
     category: "Create",
     icon: QrCode,
     highlights: ["PNG export", "Local-only"],
+  },
+  {
+    name: "Markdown Tool",
+    description: "Write markdown with a live preview, split view, and import/export actions.",
+    href: "/markdown",
+    category: "Create",
+    icon: FileText,
+    highlights: ["Live preview", "Open .md"],
   },
   {
     name: "Diff Tool",

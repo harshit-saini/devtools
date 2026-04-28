@@ -65,6 +65,13 @@ export const siteRoutes: SiteRoute[] = [
     priority: 0.8,
   },
   {
+    path: "/markdown",
+    name: "Markdown Tool",
+    description: "Write, preview, and import markdown files directly in the browser.",
+    changeFrequency: "weekly",
+    priority: 0.82,
+  },
+  {
     path: "/diff",
     name: "Diff Tool",
     description: "Visual side-by-side text and code difference comparison tool.",
