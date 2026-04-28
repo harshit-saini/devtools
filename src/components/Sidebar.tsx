@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Code2,
   FileDiff,
+  FileText,
   House,
   KeyRound,
   NotebookPen,
@@ -36,6 +37,7 @@ const navItems: NavItem[] = [
   { name: "Code Editor", href: "/editor", group: "Create", icon: Code2 },
   { name: "Drawing Pad", href: "/draw", group: "Create", icon: PencilRuler },
   { name: "QR Generator", href: "/qr", group: "Create", icon: QrCode },
+  { name: "Markdown Tool", href: "/markdown", group: "Create", icon: FileText },
 
   { name: "Diff Tool", href: "/diff", group: "Analyze", icon: FileDiff },
   { name: "CSV Viewer", href: "/csv", group: "Analyze", icon: Table2 },
