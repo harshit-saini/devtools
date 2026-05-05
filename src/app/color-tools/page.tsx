@@ -1,0 +1,7 @@
+"use client";
+import { useMemo, useState } from "react";
+import { Palette } from "lucide-react";
+import styles from "../json-yaml/tool.module.css";
+function hexToRgb(hex:string){const h=hex.replace('#','');const n=parseInt(h.length===3?h.split('').map(c=>c+c).join(''):h,16);return `${(n>>16)&255}, ${(n>>8)&255}, ${n&255}`;}
+export default function Page(){const [primary,setPrimary]=useState('#3b82f6');const [accent,setAccent]=useState('#111827');const css=useMemo(()=>`:root {\n  --primary: ${primary};\n  --accent: ${accent};\n  --primary-rgb: ${hexToRgb(primary)};\n  --accent-rgb: ${hexToRgb(accent)};\n}`,[primary,accent]);
+return <div className={`${styles.container} pageShell`}><header className="toolHeader"><div className="toolTitleRow"><span className="toolIconBadge"><Palette size={20}/></span><div><h2 className="toolTitle">Color Wheel & Theme Picker</h2><p className="toolSubtitle">Pick brand colors and generate CSS variables for themes.</p></div></div></header><div className="panel" style={{padding:'1rem',display:'grid',gap:'0.75rem'}}><label>Primary <input type="color" value={primary} onChange={e=>setPrimary(e.target.value)}/></label><label>Accent <input type="color" value={accent} onChange={e=>setAccent(e.target.value)}/></label><div style={{display:'flex',gap:'0.5rem'}}><div style={{width:48,height:48,background:primary,borderRadius:8}}/><div style={{width:48,height:48,background:accent,borderRadius:8}}/></div><textarea className={styles.area} value={css} readOnly/></div></div>}
