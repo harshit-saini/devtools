@@ -51,6 +51,13 @@ export const siteRoutes: SiteRoute[] = [
     priority: 0.82,
   },
   {
+    path: "/jupiter-notebook",
+    name: "Jupiter Notebook",
+    description: "Run notebook-like JavaScript code cells completely in-browser with no backend.",
+    changeFrequency: "weekly",
+    priority: 0.78,
+  },
+  {
     path: "/draw",
     name: "Drawing Pad Tool",
     description: "Excalidraw whiteboard for architecture sketches, flows, and diagrams.",

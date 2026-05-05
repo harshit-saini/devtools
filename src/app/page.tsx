@@ -15,6 +15,7 @@ import {
   Regex,
   Search,
   Table2,
+  Workflow,
 } from "lucide-react";
 import styles from "./page.module.css";
 
@@ -43,6 +44,14 @@ const tools: ToolCard[] = [
     category: "Create",
     icon: Code2,
     highlights: ["Monaco", "Templates"],
+  },
+  {
+    name: "Jupiter Notebook",
+    description: "Notebook-like JavaScript cells that run fully in your browser with no server.",
+    href: "/jupiter-notebook",
+    category: "Create",
+    icon: Workflow,
+    highlights: ["Cell runner", "Local-only"],
   },
   {
     name: "Drawing Pad",
