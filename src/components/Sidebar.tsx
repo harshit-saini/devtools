@@ -20,6 +20,7 @@ import {
   Search,
   Table2,
   Wrench,
+  Workflow,
 } from "lucide-react";
 import styles from "./Sidebar.module.css";
 
@@ -36,6 +37,7 @@ const navItems: NavItem[] = [
   { name: "Notepad", href: "/notepad", group: "Create", icon: NotebookPen },
   { name: "Code Editor", href: "/editor", group: "Create", icon: Code2 },
   { name: "Drawing Pad", href: "/draw", group: "Create", icon: PencilRuler },
+  { name: "Jupiter Notebook", href: "/jupiter-notebook", group: "Create", icon: Workflow },
   { name: "QR Generator", href: "/qr", group: "Create", icon: QrCode },
   { name: "Markdown Tool", href: "/markdown", group: "Create", icon: FileText },
 
