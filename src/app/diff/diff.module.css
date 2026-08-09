@@ -136,7 +136,10 @@
   }
 
   .editorCard {
-    flex: none;
+    /* Deliberately not "flex: none" here: a flex-grow item gets a definite computed height from
+       the flex algorithm, which Monaco's height:100% wrapper needs to resolve against. Dropping
+       out of flex sizing would leave the height as "auto" and collapse Monaco to near-0px tall -
+       min-height alone doesn't make a height definite for percentage-height children. */
     min-height: 420px;
   }
 }
