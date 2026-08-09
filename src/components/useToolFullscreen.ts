@@ -1,12 +1,30 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+
+function subscribeToNothing() {
+  return () => {};
+}
+
+function getFullscreenSupported() {
+  return typeof document !== "undefined" ? Boolean(document.fullscreenEnabled) : false;
+}
+
+function getFullscreenSupportedServerSnapshot() {
+  return false;
+}
 
 export function useToolFullscreen<T extends HTMLElement>() {
   const containerRef = useRef<T | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const fullscreenSupported =
-    typeof document !== "undefined" ? Boolean(document.fullscreenEnabled) : false;
+  // Browser fullscreen support is unknown during SSR. Using useSyncExternalStore (rather than
+  // computing this at render time) makes the server/client value intentionally mismatch-safe:
+  // React renders `false` on the server and during hydration, then re-checks after mount.
+  const fullscreenSupported = useSyncExternalStore(
+    subscribeToNothing,
+    getFullscreenSupported,
+    getFullscreenSupportedServerSnapshot,
+  );
 
   useEffect(() => {
     const onFullscreenChange = () => {
