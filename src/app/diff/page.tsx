@@ -1,9 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DiffEditor, type DiffOnMount } from "@monaco-editor/react";
 import type { IDisposable, editor as MonacoEditor } from "monaco-editor";
-import { ArrowLeftRight, Clipboard, Eraser, FileDiff } from "lucide-react";
+import {
+  ArrowLeftRight,
+  ChevronDown,
+  ChevronUp,
+  Clipboard,
+  Download,
+  Eraser,
+  FileDiff,
+  FileUp,
+  RotateCcw,
+} from "lucide-react";
 import styles from "./diff.module.css";
 import ToolFullscreenButton from "@/components/ToolFullscreenButton";
 import { useToolFullscreen } from "@/components/useToolFullscreen";
@@ -12,6 +22,7 @@ type DiffStats = {
   changedBlocks: number;
   addedLines: number;
   removedLines: number;
+  changedLines: number;
 };
 
 type LanguageOption = {
@@ -27,23 +38,53 @@ const languageOptions: LanguageOption[] = [
   { id: "markdown", name: "Markdown" },
   { id: "css", name: "CSS" },
   { id: "html", name: "HTML" },
+  { id: "yaml", name: "YAML" },
   { id: "plaintext", name: "Plain text" },
 ];
 
 const defaultOriginal = `function sum(a, b) {\n  return a + b;\n}\n\nconsole.log(sum(2, 3));`;
 const defaultModified = `function sum(a, b, c = 0) {\n  return a + b + c;\n}\n\nconsole.log(sum(2, 3, 5));`;
 
+const ORIGINAL_KEY = "devtools.diff.original";
+const MODIFIED_KEY = "devtools.diff.modified";
+const ORIGINAL_LANG_KEY = "devtools.diff.originalLanguage";
+const MODIFIED_LANG_KEY = "devtools.diff.modifiedLanguage";
+const SIDE_BY_SIDE_KEY = "devtools.diff.sideBySide";
+const IGNORE_TRIM_KEY = "devtools.diff.ignoreTrim";
+
+const SAVE_DEBOUNCE_MS = 400;
+const NARROW_VIEWPORT_QUERY = "(max-width: 760px)";
+
+function readLocalString(key: string, fallback: string): string {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  const stored = window.localStorage.getItem(key);
+  return stored ?? fallback;
+}
+
+function readLocalBoolean(key: string, fallback: boolean): boolean {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  const stored = window.localStorage.getItem(key);
+  if (stored === null) {
+    return fallback;
+  }
+
+  return stored === "true";
+}
+
 function calculateStats(changes: readonly MonacoEditor.ILineChange[] | null): DiffStats {
   if (!changes || changes.length === 0) {
-    return {
-      changedBlocks: 0,
-      addedLines: 0,
-      removedLines: 0,
-    };
+    return { changedBlocks: 0, addedLines: 0, removedLines: 0, changedLines: 0 };
   }
 
   let addedLines = 0;
   let removedLines = 0;
+  let changedLines = 0;
 
   for (const change of changes) {
     const originalLines = Math.max(change.originalEndLineNumber - change.originalStartLineNumber + 1, 0);
@@ -59,6 +100,7 @@ function calculateStats(changes: readonly MonacoEditor.ILineChange[] | null): Di
       continue;
     }
 
+    changedLines += Math.min(originalLines, modifiedLines);
     if (modifiedLines > originalLines) {
       addedLines += modifiedLines - originalLines;
     } else if (originalLines > modifiedLines) {
@@ -66,30 +108,116 @@ function calculateStats(changes: readonly MonacoEditor.ILineChange[] | null): Di
     }
   }
 
-  return {
-    changedBlocks: changes.length,
-    addedLines,
-    removedLines,
-  };
+  return { changedBlocks: changes.length, addedLines, removedLines, changedLines };
+}
+
+function copyToClipboard(value: string): Promise<boolean> {
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard
+      .writeText(value)
+      .then(() => true)
+      .catch(() => copyWithFallback(value));
+  }
+
+  return Promise.resolve(copyWithFallback(value));
+}
+
+function copyWithFallback(value: string): boolean {
+  if (typeof document === "undefined") {
+    return false;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  let succeeded = false;
+  try {
+    succeeded = document.execCommand("copy");
+  } catch {
+    succeeded = false;
+  }
+
+  document.body.removeChild(textarea);
+  return succeeded;
+}
+
+function buildUnifiedDiff(
+  changes: readonly MonacoEditor.ILineChange[] | null,
+  originalModel: MonacoEditor.ITextModel,
+  modifiedModel: MonacoEditor.ITextModel,
+): string {
+  if (!changes || changes.length === 0) {
+    return "";
+  }
+
+  const hunks: string[] = ["--- original", "+++ modified"];
+
+  for (const change of changes) {
+    const originalLines = Math.max(change.originalEndLineNumber - change.originalStartLineNumber + 1, 0);
+    const modifiedLines = Math.max(change.modifiedEndLineNumber - change.modifiedStartLineNumber + 1, 0);
+
+    hunks.push(
+      `@@ -${change.originalStartLineNumber},${originalLines} +${change.modifiedStartLineNumber},${modifiedLines} @@`,
+    );
+
+    if (change.originalEndLineNumber !== 0) {
+      for (let line = change.originalStartLineNumber; line <= change.originalEndLineNumber; line += 1) {
+        hunks.push(`-${originalModel.getLineContent(line)}`);
+      }
+    }
+
+    if (change.modifiedEndLineNumber !== 0) {
+      for (let line = change.modifiedStartLineNumber; line <= change.modifiedEndLineNumber; line += 1) {
+        hunks.push(`+${modifiedModel.getLineContent(line)}`);
+      }
+    }
+  }
+
+  return hunks.join("\n");
 }
 
 export default function DiffTool() {
   const { containerRef, isFullscreen, fullscreenSupported, toggleFullscreen } =
     useToolFullscreen<HTMLDivElement>();
-  const [original, setOriginal] = useState(defaultOriginal);
-  const [modified, setModified] = useState(defaultModified);
-  const [language, setLanguage] = useState("typescript");
-  const [renderSideBySide, setRenderSideBySide] = useState(true);
-  const [ignoreTrimWhitespace, setIgnoreTrimWhitespace] = useState(false);
-  const [notice, setNotice] = useState("");
+
+  const [original, setOriginal] = useState(() => readLocalString(ORIGINAL_KEY, defaultOriginal));
+  const [modified, setModified] = useState(() => readLocalString(MODIFIED_KEY, defaultModified));
+  const [originalLanguage, setOriginalLanguage] = useState(() =>
+    readLocalString(ORIGINAL_LANG_KEY, "typescript"),
+  );
+  const [modifiedLanguage, setModifiedLanguage] = useState(() =>
+    readLocalString(MODIFIED_LANG_KEY, "typescript"),
+  );
+  const [renderSideBySide, setRenderSideBySide] = useState(() => readLocalBoolean(SIDE_BY_SIDE_KEY, true));
+  const [ignoreTrimWhitespace, setIgnoreTrimWhitespace] = useState(() =>
+    readLocalBoolean(IGNORE_TRIM_KEY, false),
+  );
+  const [isNarrowViewport, setIsNarrowViewport] = useState(() =>
+    typeof window === "undefined" ? false : window.matchMedia(NARROW_VIEWPORT_QUERY).matches,
+  );
+  const [notice, setNotice] = useState<{ id: number; text: string }>({ id: 0, text: "" });
   const [stats, setStats] = useState<DiffStats>(() => ({
     changedBlocks: 0,
     addedLines: 0,
     removedLines: 0,
+    changedLines: 0,
   }));
 
   const diffEditorRef = useRef<MonacoEditor.IStandaloneDiffEditor | null>(null);
   const disposablesRef = useRef<IDisposable[]>([]);
+  const originalFileInputRef = useRef<HTMLInputElement>(null);
+  const modifiedFileInputRef = useRef<HTMLInputElement>(null);
+  const noticeCounterRef = useRef(0);
+
+  const announce = (text: string) => {
+    noticeCounterRef.current += 1;
+    setNotice({ id: noticeCounterRef.current, text });
+  };
 
   useEffect(() => {
     return () => {
@@ -100,16 +228,53 @@ export default function DiffTool() {
   }, []);
 
   useEffect(() => {
-    if (!notice) {
+    if (!notice.text) {
       return;
     }
 
     const timeoutId = window.setTimeout(() => {
-      setNotice("");
-    }, 1500);
+      setNotice((current) => (current.id === notice.id ? { ...current, text: "" } : current));
+    }, 1800);
 
     return () => window.clearTimeout(timeoutId);
   }, [notice]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(NARROW_VIEWPORT_QUERY);
+    const handleChange = (event: MediaQueryListEvent) => setIsNarrowViewport(event.matches);
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      window.localStorage.setItem(ORIGINAL_KEY, original);
+    }, SAVE_DEBOUNCE_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [original]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      window.localStorage.setItem(MODIFIED_KEY, modified);
+    }, SAVE_DEBOUNCE_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [modified]);
+
+  useEffect(() => {
+    window.localStorage.setItem(ORIGINAL_LANG_KEY, originalLanguage);
+  }, [originalLanguage]);
+
+  useEffect(() => {
+    window.localStorage.setItem(MODIFIED_LANG_KEY, modifiedLanguage);
+  }, [modifiedLanguage]);
+
+  useEffect(() => {
+    window.localStorage.setItem(SIDE_BY_SIDE_KEY, String(renderSideBySide));
+  }, [renderSideBySide]);
+
+  useEffect(() => {
+    window.localStorage.setItem(IGNORE_TRIM_KEY, String(ignoreTrimWhitespace));
+  }, [ignoreTrimWhitespace]);
 
   const recalculateStats = (editorInstance?: MonacoEditor.IStandaloneDiffEditor | null) => {
     const activeEditor = editorInstance ?? diffEditorRef.current;
@@ -154,28 +319,93 @@ export default function DiffTool() {
   const swapSides = () => {
     setOriginal(modified);
     setModified(original);
-    setNotice("Swapped original and modified panes");
+    const swappedLanguage = originalLanguage;
+    setOriginalLanguage(modifiedLanguage);
+    setModifiedLanguage(swappedLanguage);
+    announce("Swapped original and modified panes");
   };
 
   const clearBoth = () => {
     setOriginal("");
     setModified("");
-    setNotice("Cleared both panes");
+    announce("Cleared both panes");
+  };
+
+  const resetToSample = () => {
+    setOriginal(defaultOriginal);
+    setModified(defaultModified);
+    announce("Restored sample content");
   };
 
   const copyPane = async (value: string, label: string) => {
     if (!value) {
-      setNotice(`No ${label.toLowerCase()} content to copy`);
+      announce(`No ${label.toLowerCase()} content to copy`);
+      return;
+    }
+
+    const succeeded = await copyToClipboard(value);
+    announce(succeeded ? `${label} copied` : "Clipboard copy failed");
+  };
+
+  const importFile = async (event: React.ChangeEvent<HTMLInputElement>, side: "original" | "modified") => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(value);
-      setNotice(`${label} copied`);
+      const text = await file.text();
+      if (side === "original") {
+        setOriginal(text);
+      } else {
+        setModified(text);
+      }
+      announce(`Loaded ${file.name} into ${side}`);
     } catch {
-      setNotice("Clipboard copy failed");
+      announce("Could not read that file");
     }
   };
+
+  const downloadPatch = () => {
+    const editorInstance = diffEditorRef.current;
+    const model = editorInstance?.getModel();
+    if (!editorInstance || !model) {
+      return;
+    }
+
+    const patch = buildUnifiedDiff(editorInstance.getLineChanges(), model.original, model.modified);
+    if (!patch) {
+      announce("No differences to export");
+      return;
+    }
+
+    const blob = new Blob([patch], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "diff.patch";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const goToDiff = (direction: "next" | "previous") => {
+    diffEditorRef.current?.goToDiff(direction);
+  };
+
+  const isIdentical = original === modified;
+  const effectiveSideBySide = renderSideBySide && !isNarrowViewport;
+
+  const similarity = useMemo(() => {
+    const modifiedLineCount = modified.length === 0 ? 0 : modified.split("\n").length;
+    if (modifiedLineCount === 0) {
+      return null;
+    }
+
+    const touchedLines = stats.addedLines + stats.changedLines;
+    const unchangedLines = Math.max(modifiedLineCount - touchedLines, 0);
+    return Math.round((unchangedLines / modifiedLineCount) * 100);
+  }, [modified, stats]);
 
   return (
     <div
@@ -201,30 +431,47 @@ export default function DiffTool() {
             onToggle={toggleFullscreen}
             supported={fullscreenSupported}
           />
-          <select
-            value={language}
-            className={styles.languageSelect}
-            onChange={(event) => setLanguage(event.target.value)}
-            aria-label="Select diff language"
-          >
-            {languageOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}
-              </option>
-            ))}
-          </select>
 
-          <button className="btn btnSecondary" onClick={() => copyPane(original, "Original") }>
+          <button className="btn btnSecondary" onClick={() => originalFileInputRef.current?.click()}>
+            <FileUp size={15} />
+            Load left
+          </button>
+          <button className="btn btnSecondary" onClick={() => modifiedFileInputRef.current?.click()}>
+            <FileUp size={15} />
+            Load right
+          </button>
+          <input
+            ref={originalFileInputRef}
+            type="file"
+            className={styles.hiddenInput}
+            onChange={(event) => importFile(event, "original")}
+          />
+          <input
+            ref={modifiedFileInputRef}
+            type="file"
+            className={styles.hiddenInput}
+            onChange={(event) => importFile(event, "modified")}
+          />
+
+          <button className="btn btnSecondary" onClick={() => copyPane(original, "Original")}>
             <Clipboard size={15} />
             Copy left
           </button>
-          <button className="btn btnSecondary" onClick={() => copyPane(modified, "Modified") }>
+          <button className="btn btnSecondary" onClick={() => copyPane(modified, "Modified")}>
             <Clipboard size={15} />
             Copy right
           </button>
           <button className="btn btnSecondary" onClick={swapSides}>
             <ArrowLeftRight size={15} />
             Swap
+          </button>
+          <button className="btn btnSecondary" onClick={downloadPatch}>
+            <Download size={15} />
+            Export patch
+          </button>
+          <button className="btn btnGhost" onClick={resetToSample}>
+            <RotateCcw size={15} />
+            Reset sample
           </button>
           <button className="btn btnDanger" onClick={clearBoth}>
             <Eraser size={15} />
@@ -234,14 +481,77 @@ export default function DiffTool() {
       </header>
 
       <div className="toolMetaRow">
-        <span className="statusChip">Blocks changed: {stats.changedBlocks}</span>
-        <span className="statusChip">Added lines: {stats.addedLines}</span>
-        <span className="statusChip">Removed lines: {stats.removedLines}</span>
+        <div className={styles.langGroup}>
+          <label className={styles.langLabel} htmlFor="diff-original-language">
+            Left
+            <select
+              id="diff-original-language"
+              value={originalLanguage}
+              className={styles.languageSelect}
+              onChange={(event) => setOriginalLanguage(event.target.value)}
+            >
+              {languageOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className={styles.langLabel} htmlFor="diff-modified-language">
+            Right
+            <select
+              id="diff-modified-language"
+              value={modifiedLanguage}
+              className={styles.languageSelect}
+              onChange={(event) => setModifiedLanguage(event.target.value)}
+            >
+              {languageOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {isIdentical ? (
+          <span className={`statusChip ${styles.identicalChip}`}>Panes are identical</span>
+        ) : (
+          <>
+            <span className="statusChip">Blocks changed: {stats.changedBlocks}</span>
+            <span className="statusChip">Added: {stats.addedLines}</span>
+            <span className="statusChip">Removed: {stats.removedLines}</span>
+            <span className="statusChip">Changed: {stats.changedLines}</span>
+            {similarity !== null && <span className="statusChip">{similarity}% similar</span>}
+          </>
+        )}
+
+        <div className={styles.navGroup}>
+          <button
+            className="btn btnGhost"
+            onClick={() => goToDiff("previous")}
+            disabled={stats.changedBlocks === 0}
+            aria-label="Go to previous change"
+            title="Previous change (Shift+F7)"
+          >
+            <ChevronUp size={15} />
+          </button>
+          <button
+            className="btn btnGhost"
+            onClick={() => goToDiff("next")}
+            disabled={stats.changedBlocks === 0}
+            aria-label="Go to next change"
+            title="Next change (F7)"
+          >
+            <ChevronDown size={15} />
+          </button>
+        </div>
 
         <label className={styles.toggleWrap}>
           <input
             type="checkbox"
             checked={renderSideBySide}
+            disabled={isNarrowViewport}
             onChange={(event) => setRenderSideBySide(event.target.checked)}
           />
           Side by side
@@ -256,19 +566,29 @@ export default function DiffTool() {
           Ignore trim whitespace
         </label>
 
-        {notice && <span className={styles.notice}>{notice}</span>}
+        <span className={styles.notice} aria-hidden={!notice.text}>
+          {notice.text}
+        </span>
+        <span role="status" aria-live="polite" className={styles.srOnly}>
+          {notice.text}
+        </span>
       </div>
+
+      {isNarrowViewport && renderSideBySide && (
+        <p className="helperText">Side-by-side view is switched to inline on small screens.</p>
+      )}
 
       <section className={`${styles.editorCard} panel`}>
         <DiffEditor
           height="100%"
           theme="vs-dark"
-          language={language}
+          originalLanguage={originalLanguage}
+          modifiedLanguage={modifiedLanguage}
           original={original}
           modified={modified}
           onMount={handleDiffMount}
           options={{
-            renderSideBySide,
+            renderSideBySide: effectiveSideBySide,
             originalEditable: true,
             ignoreTrimWhitespace,
             minimap: { enabled: false },
