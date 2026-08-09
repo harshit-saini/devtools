@@ -51,6 +51,8 @@ const ORIGINAL_LANG_KEY = "devtools.diff.originalLanguage";
 const MODIFIED_LANG_KEY = "devtools.diff.modifiedLanguage";
 const SIDE_BY_SIDE_KEY = "devtools.diff.sideBySide";
 const IGNORE_TRIM_KEY = "devtools.diff.ignoreTrim";
+const WORD_WRAP_KEY = "devtools.diff.wordWrap";
+const INDENT_GUIDES_KEY = "devtools.diff.indentGuides";
 
 const SAVE_DEBOUNCE_MS = 400;
 const NARROW_VIEWPORT_QUERY = "(max-width: 760px)";
@@ -197,6 +199,8 @@ export default function DiffTool() {
   const [ignoreTrimWhitespace, setIgnoreTrimWhitespace] = useState(() =>
     readLocalBoolean(IGNORE_TRIM_KEY, false),
   );
+  const [wordWrap, setWordWrap] = useState(() => readLocalBoolean(WORD_WRAP_KEY, true));
+  const [showIndentGuides, setShowIndentGuides] = useState(() => readLocalBoolean(INDENT_GUIDES_KEY, true));
   const [isNarrowViewport, setIsNarrowViewport] = useState(() =>
     typeof window === "undefined" ? false : window.matchMedia(NARROW_VIEWPORT_QUERY).matches,
   );
@@ -275,6 +279,14 @@ export default function DiffTool() {
   useEffect(() => {
     window.localStorage.setItem(IGNORE_TRIM_KEY, String(ignoreTrimWhitespace));
   }, [ignoreTrimWhitespace]);
+
+  useEffect(() => {
+    window.localStorage.setItem(WORD_WRAP_KEY, String(wordWrap));
+  }, [wordWrap]);
+
+  useEffect(() => {
+    window.localStorage.setItem(INDENT_GUIDES_KEY, String(showIndentGuides));
+  }, [showIndentGuides]);
 
   const recalculateStats = (editorInstance?: MonacoEditor.IStandaloneDiffEditor | null) => {
     const activeEditor = editorInstance ?? diffEditorRef.current;
@@ -566,6 +578,24 @@ export default function DiffTool() {
           Ignore trim whitespace
         </label>
 
+        <label className={styles.toggleWrap}>
+          <input
+            type="checkbox"
+            checked={wordWrap}
+            onChange={(event) => setWordWrap(event.target.checked)}
+          />
+          Wrap long lines
+        </label>
+
+        <label className={styles.toggleWrap}>
+          <input
+            type="checkbox"
+            checked={showIndentGuides}
+            onChange={(event) => setShowIndentGuides(event.target.checked)}
+          />
+          Indent guides
+        </label>
+
         <span className={styles.notice} aria-hidden={!notice.text}>
           {notice.text}
         </span>
@@ -592,7 +622,10 @@ export default function DiffTool() {
             originalEditable: true,
             ignoreTrimWhitespace,
             minimap: { enabled: false },
-            wordWrap: "on",
+            wordWrap: wordWrap ? "on" : "off",
+            diffWordWrap: wordWrap ? "on" : "off",
+            wrappingIndent: wordWrap ? "same" : "none",
+            guides: { indentation: showIndentGuides },
             automaticLayout: true,
             fontSize: 13,
             fontFamily: "'IBM Plex Mono', Consolas, monospace",
