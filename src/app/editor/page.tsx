@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Editor from "@monaco-editor/react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Editor, { type OnMount } from "@monaco-editor/react";
+import type { editor as MonacoEditor } from "monaco-editor";
 import { Clipboard, Code2, Download, Sparkles, RotateCcw } from "lucide-react";
 import styles from "./editor.module.css";
 import ToolFullscreenButton from "@/components/ToolFullscreenButton";
 import { useToolFullscreen } from "@/components/useToolFullscreen";
+import { ensureMonacoConfigured } from "@/lib/monacoSetup";
 
 const DRAFTS_KEY = "devtools.editor.drafts";
 const LANGUAGE_KEY = "devtools.editor.language";
@@ -118,6 +120,53 @@ export default function CodeEditor() {
   const [isPendingSave, setIsPendingSave] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(() => readLocalNumber(SAVED_AT_KEY));
   const [notice, setNotice] = useState("");
+  const [monacoReady, setMonacoReady] = useState(false);
+
+  const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
+  const editorContainerRef = useRef<HTMLDivElement | null>(null);
+  const lastMeasuredSizeRef = useRef<{ width: number; height: number } | null>(null);
+
+  // <Editor> must not mount until this resolves - see the comment in monacoSetup.ts for why.
+  useEffect(() => {
+    let cancelled = false;
+    ensureMonacoConfigured().then(() => {
+      if (!cancelled) {
+        setMonacoReady(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Monaco's automaticLayout misreads its container's height when the editor mounts
+  // asynchronously like this - see the matching comment in the diff tool for the full
+  // explanation. Drive layout from a ResizeObserver instead of trusting Monaco's own measurement.
+  //
+  // The observer's first (correctly-sized) notification fires almost immediately on observe() -
+  // before <Editor>'s own async init chain has called onMount, so editorRef.current is still
+  // null right when it matters most. Cache the last measured size so handleEditorMount can apply
+  // it itself once the editor instance actually exists.
+  useEffect(() => {
+    const container = editorContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+
+      const size = { width: entry.contentRect.width, height: entry.contentRect.height };
+      lastMeasuredSizeRef.current = size;
+      editorRef.current?.layout(size);
+    });
+
+    resizeObserver.observe(container);
+    return () => resizeObserver.disconnect();
+  }, [monacoReady]);
 
   const code = drafts[language] ?? "";
 
@@ -202,6 +251,16 @@ export default function CodeEditor() {
 
     handleCodeChange(defaultSnippets[language]);
     setNotice("Template restored");
+  };
+
+  const handleEditorMount: OnMount = (editorInstance) => {
+    editorRef.current = editorInstance;
+
+    // See the comment on the ResizeObserver effect above: apply whatever it last measured right
+    // now, so the editor doesn't render at whatever tiny size Monaco guessed on its own.
+    if (lastMeasuredSizeRef.current) {
+      editorInstance.layout(lastMeasuredSizeRef.current);
+    }
   };
 
   const handleFormatJson = () => {
@@ -294,25 +353,32 @@ export default function CodeEditor() {
         {notice && <span className={styles.notice}>{notice}</span>}
       </div>
 
-      <section className={`${styles.editorCard} panel`}>
-        <Editor
-          height="100%"
-          language={language}
-          theme="vs-dark"
-          value={code}
-          onChange={(value) => handleCodeChange(value ?? "")}
-          options={{
-            minimap: { enabled: false },
-            fontSize,
-            fontFamily: "'IBM Plex Mono', Consolas, monospace",
-            wordWrap: "on",
-            automaticLayout: true,
-            smoothScrolling: true,
-            tabSize: 2,
-            padding: { top: 14 },
-          }}
-          loading={<div className={styles.loading}>Loading editor...</div>}
-        />
+      <section className={`${styles.editorCard} panel`} ref={editorContainerRef}>
+        {monacoReady ? (
+          <Editor
+            height="100%"
+            language={language}
+            theme="vs-dark"
+            value={code}
+            onChange={(value) => handleCodeChange(value ?? "")}
+            onMount={handleEditorMount}
+            options={{
+              minimap: { enabled: false },
+              fontSize,
+              fontFamily: "'IBM Plex Mono', Consolas, monospace",
+              wordWrap: "on",
+              // automaticLayout is intentionally off - a ResizeObserver on this section drives
+              // layout manually instead, see the comment above that effect for why.
+              automaticLayout: false,
+              smoothScrolling: true,
+              tabSize: 2,
+              padding: { top: 14 },
+            }}
+            loading={<div className={styles.loading}>Loading editor...</div>}
+          />
+        ) : (
+          <div className={styles.loading}>Loading editor...</div>
+        )}
       </section>
     </div>
   );

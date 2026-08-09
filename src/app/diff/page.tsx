@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { DiffEditor, type DiffOnMount } from "@monaco-editor/react";
 import type { IDisposable, editor as MonacoEditor } from "monaco-editor";
+import { ensureMonacoConfigured } from "@/lib/monacoSetup";
 import {
   ArrowLeftRight,
   ChevronDown,
@@ -224,9 +225,12 @@ export default function DiffTool() {
     removedLines: 0,
     changedLines: 0,
   }));
+  const [monacoReady, setMonacoReady] = useState(false);
 
   const diffEditorRef = useRef<MonacoEditor.IStandaloneDiffEditor | null>(null);
   const disposablesRef = useRef<IDisposable[]>([]);
+  const editorContainerRef = useRef<HTMLDivElement | null>(null);
+  const lastMeasuredSizeRef = useRef<{ width: number; height: number } | null>(null);
   const originalFileInputRef = useRef<HTMLInputElement>(null);
   const modifiedFileInputRef = useRef<HTMLInputElement>(null);
   const noticeCounterRef = useRef(0);
@@ -235,6 +239,51 @@ export default function DiffTool() {
     noticeCounterRef.current += 1;
     setNotice({ id: noticeCounterRef.current, text });
   };
+
+  // Monaco's own automaticLayout (auto-detecting its container's size via getBoundingClientRect)
+  // misreads the height here - it locks onto a near-zero value on narrow/inline layouts even
+  // though the container is a real, definite 420px, and neither a later resize nor a manual
+  // no-arg .layout() call corrects it (confirmed by hand: only an explicit .layout({width,
+  // height}) with measured numbers fixes it). Drive layout from a ResizeObserver on the actual
+  // wrapper element instead of trusting Monaco's own measurement.
+  //
+  // The observer's first notification (which carries the correct size) fires almost immediately
+  // on observe() - before DiffEditor's own async init chain has called onMount, so
+  // diffEditorRef.current is still null right when it matters most. Cache the last measured size
+  // so handleDiffMount can apply it itself once the editor instance actually exists.
+  useEffect(() => {
+    const container = editorContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+
+      const size = { width: entry.contentRect.width, height: entry.contentRect.height };
+      lastMeasuredSizeRef.current = size;
+      diffEditorRef.current?.layout(size);
+    });
+
+    resizeObserver.observe(container);
+    return () => resizeObserver.disconnect();
+  }, [monacoReady]);
+
+  // <DiffEditor> must not mount until this resolves - see the comment in monacoSetup.ts for why.
+  useEffect(() => {
+    let cancelled = false;
+    ensureMonacoConfigured().then(() => {
+      if (!cancelled) {
+        setMonacoReady(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -320,6 +369,13 @@ export default function DiffTool() {
 
   const handleDiffMount: DiffOnMount = (editorInstance) => {
     diffEditorRef.current = editorInstance;
+
+    // The ResizeObserver's first (correctly-sized) notification typically fires before this
+    // mount callback does - see the comment above that effect. Apply whatever it last measured
+    // right now, so the editor doesn't render at whatever tiny size Monaco guessed on its own.
+    if (lastMeasuredSizeRef.current) {
+      editorInstance.layout(lastMeasuredSizeRef.current);
+    }
 
     for (const disposable of disposablesRef.current) {
       disposable.dispose();
@@ -654,31 +710,37 @@ export default function DiffTool() {
         <p className="helperText">Side-by-side view is switched to inline on small screens.</p>
       )}
 
-      <section className={`${styles.editorCard} panel`}>
-        <DiffEditor
-          height="100%"
-          theme="vs-dark"
-          originalLanguage={originalLanguage}
-          modifiedLanguage={modifiedLanguage}
-          original={original}
-          modified={modified}
-          onMount={handleDiffMount}
-          options={{
-            renderSideBySide: effectiveSideBySide,
-            originalEditable: true,
-            ignoreTrimWhitespace,
-            minimap: { enabled: false },
-            wordWrap: wordWrap ? "on" : "off",
-            diffWordWrap: wordWrap ? "on" : "off",
-            wrappingIndent: wordWrap ? "same" : "none",
-            guides: { indentation: showIndentGuides },
-            automaticLayout: true,
-            fontSize: 13,
-            fontFamily: "'IBM Plex Mono', Consolas, monospace",
-            padding: { top: 14 },
-          }}
-          loading={<div className={styles.loading}>Loading diff editor...</div>}
-        />
+      <section className={`${styles.editorCard} panel`} ref={editorContainerRef}>
+        {monacoReady ? (
+          <DiffEditor
+            height="100%"
+            theme="vs-dark"
+            originalLanguage={originalLanguage}
+            modifiedLanguage={modifiedLanguage}
+            original={original}
+            modified={modified}
+            onMount={handleDiffMount}
+            options={{
+              renderSideBySide: effectiveSideBySide,
+              originalEditable: true,
+              ignoreTrimWhitespace,
+              minimap: { enabled: false },
+              wordWrap: wordWrap ? "on" : "off",
+              diffWordWrap: wordWrap ? "on" : "off",
+              wrappingIndent: wordWrap ? "same" : "none",
+              guides: { indentation: showIndentGuides },
+              // automaticLayout is intentionally off - a ResizeObserver on this section drives
+              // layout manually instead, see the comment above the observer effect for why.
+              automaticLayout: false,
+              fontSize: 13,
+              fontFamily: "'IBM Plex Mono', Consolas, monospace",
+              padding: { top: 14 },
+            }}
+            loading={<div className={styles.loading}>Loading diff editor...</div>}
+          />
+        ) : (
+          <div className={styles.loading}>Loading diff editor...</div>
+        )}
       </section>
     </div>
   );
