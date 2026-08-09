@@ -9,14 +9,48 @@
   gap: 8px;
 }
 
+.hiddenInput {
+  display: none;
+}
+
+.langGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.langLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
 .languageSelect {
-  min-width: 156px;
+  min-width: 140px;
   min-height: 38px;
   padding: 0 10px;
   border-radius: 11px;
   border: 1px solid var(--border-color);
   background: rgba(255, 255, 255, 0.94);
   font-size: 0.88rem;
+  text-transform: none;
+  font-weight: 500;
+  letter-spacing: normal;
+}
+
+.navGroup {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.navGroup .btn {
+  min-height: 30px;
+  padding: 0 8px;
 }
 
 .toggleWrap {
@@ -32,6 +66,17 @@
   font-size: 0.8rem;
 }
 
+.toggleWrap input:disabled {
+  cursor: not-allowed;
+}
+
+.identicalChip {
+  color: var(--accent-strong);
+  background: rgba(15, 118, 110, 0.14);
+  border-color: rgba(15, 118, 110, 0.24);
+  font-weight: 700;
+}
+
 .notice {
   display: inline-flex;
   align-items: center;
@@ -43,6 +88,24 @@
   color: var(--accent-strong);
   font-size: 0.8rem;
   font-weight: 700;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+
+.notice[aria-hidden="false"] {
+  opacity: 1;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .editorCard {
@@ -60,5 +123,20 @@
 @media (max-width: 840px) {
   .actions {
     justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .langGroup {
+    width: 100%;
+  }
+
+  .langLabel {
+    flex: 1;
+  }
+
+  .languageSelect {
+    width: 100%;
+    min-width: 0;
   }
 }
