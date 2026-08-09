@@ -1,0 +1,177 @@
+.container {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.notice {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  background: rgba(15, 118, 110, 0.14);
+  color: var(--accent-strong);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.error {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(190, 18, 60, 0.24);
+  background: rgba(190, 18, 60, 0.12);
+  color: var(--danger);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+}
+
+.sectionTitle {
+  font-size: 1rem;
+}
+
+.inputRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.textInput {
+  flex: 1;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(20, 36, 50, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.88);
+  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-size: 0.9rem;
+  min-width: 0;
+}
+
+.textInput[aria-invalid="true"] {
+  border-color: rgba(190, 18, 60, 0.5);
+}
+
+.unitSelect {
+  min-height: 42px;
+  padding: 0 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.94);
+  font-size: 0.84rem;
+}
+
+.pickerInput {
+  min-height: 42px;
+  padding: 0 10px;
+  border: 1px solid rgba(20, 36, 50, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.88);
+  font-size: 0.84rem;
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.outputList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.outputRow {
+  display: grid;
+  grid-template-columns: 108px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.outputLabel {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.outputValue {
+  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-size: 0.86rem;
+  color: var(--text-main);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.iconButton:hover {
+  color: var(--accent-strong);
+  border-color: rgba(15, 118, 110, 0.3);
+}
+
+@media (max-width: 900px) {
+  .actions {
+    justify-content: flex-start;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .outputRow {
+    grid-template-columns: 88px minmax(0, 1fr) auto;
+  }
+
+  .inputRow {
+    flex-wrap: wrap;
+  }
+
+  .textInput {
+    flex-basis: 100%;
+  }
+
+  .unitSelect,
+  .pickerInput {
+    flex: 1;
+  }
+}
