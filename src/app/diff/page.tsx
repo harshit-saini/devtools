@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { DiffEditor, type DiffOnMount } from "@monaco-editor/react";
 import type { IDisposable, editor as MonacoEditor } from "monaco-editor";
 import {
@@ -51,9 +51,25 @@ const ORIGINAL_LANG_KEY = "devtools.diff.originalLanguage";
 const MODIFIED_LANG_KEY = "devtools.diff.modifiedLanguage";
 const SIDE_BY_SIDE_KEY = "devtools.diff.sideBySide";
 const IGNORE_TRIM_KEY = "devtools.diff.ignoreTrim";
+const WORD_WRAP_KEY = "devtools.diff.wordWrap";
+const INDENT_GUIDES_KEY = "devtools.diff.indentGuides";
 
 const SAVE_DEBOUNCE_MS = 400;
 const NARROW_VIEWPORT_QUERY = "(max-width: 760px)";
+
+function subscribeToViewport(callback: () => void) {
+  const mediaQuery = window.matchMedia(NARROW_VIEWPORT_QUERY);
+  mediaQuery.addEventListener("change", callback);
+  return () => mediaQuery.removeEventListener("change", callback);
+}
+
+function getViewportSnapshot() {
+  return window.matchMedia(NARROW_VIEWPORT_QUERY).matches;
+}
+
+function getViewportServerSnapshot() {
+  return false;
+}
 
 function readLocalString(key: string, fallback: string): string {
   if (typeof window === "undefined") {
@@ -185,20 +201,21 @@ export default function DiffTool() {
   const { containerRef, isFullscreen, fullscreenSupported, toggleFullscreen } =
     useToolFullscreen<HTMLDivElement>();
 
-  const [original, setOriginal] = useState(() => readLocalString(ORIGINAL_KEY, defaultOriginal));
-  const [modified, setModified] = useState(() => readLocalString(MODIFIED_KEY, defaultModified));
-  const [originalLanguage, setOriginalLanguage] = useState(() =>
-    readLocalString(ORIGINAL_LANG_KEY, "typescript"),
-  );
-  const [modifiedLanguage, setModifiedLanguage] = useState(() =>
-    readLocalString(MODIFIED_LANG_KEY, "typescript"),
-  );
-  const [renderSideBySide, setRenderSideBySide] = useState(() => readLocalBoolean(SIDE_BY_SIDE_KEY, true));
-  const [ignoreTrimWhitespace, setIgnoreTrimWhitespace] = useState(() =>
-    readLocalBoolean(IGNORE_TRIM_KEY, false),
-  );
-  const [isNarrowViewport, setIsNarrowViewport] = useState(() =>
-    typeof window === "undefined" ? false : window.matchMedia(NARROW_VIEWPORT_QUERY).matches,
+  // Initial state below intentionally matches what the server renders (hardcoded defaults, not
+  // localStorage) so hydration never mismatches. Saved values are restored once, after mount,
+  // in the effect further down — see the comment there.
+  const [original, setOriginal] = useState(defaultOriginal);
+  const [modified, setModified] = useState(defaultModified);
+  const [originalLanguage, setOriginalLanguage] = useState("typescript");
+  const [modifiedLanguage, setModifiedLanguage] = useState("typescript");
+  const [renderSideBySide, setRenderSideBySide] = useState(true);
+  const [ignoreTrimWhitespace, setIgnoreTrimWhitespace] = useState(false);
+  const [wordWrap, setWordWrap] = useState(true);
+  const [showIndentGuides, setShowIndentGuides] = useState(true);
+  const isNarrowViewport = useSyncExternalStore(
+    subscribeToViewport,
+    getViewportSnapshot,
+    getViewportServerSnapshot,
   );
   const [notice, setNotice] = useState<{ id: number; text: string }>({ id: 0, text: "" });
   const [stats, setStats] = useState<DiffStats>(() => ({
@@ -239,11 +256,19 @@ export default function DiffTool() {
     return () => window.clearTimeout(timeoutId);
   }, [notice]);
 
+  // Runs once after mount to restore anything saved from a previous visit. This must happen
+  // after mount (not in the initial useState above) so the client's first render still matches
+  // the server-rendered defaults - reading localStorage during the initial render would mismatch
+  // hydration whenever a saved value differs from the hardcoded default.
   useEffect(() => {
-    const mediaQuery = window.matchMedia(NARROW_VIEWPORT_QUERY);
-    const handleChange = (event: MediaQueryListEvent) => setIsNarrowViewport(event.matches);
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
+    setOriginal(readLocalString(ORIGINAL_KEY, defaultOriginal));
+    setModified(readLocalString(MODIFIED_KEY, defaultModified));
+    setOriginalLanguage(readLocalString(ORIGINAL_LANG_KEY, "typescript"));
+    setModifiedLanguage(readLocalString(MODIFIED_LANG_KEY, "typescript"));
+    setRenderSideBySide(readLocalBoolean(SIDE_BY_SIDE_KEY, true));
+    setIgnoreTrimWhitespace(readLocalBoolean(IGNORE_TRIM_KEY, false));
+    setWordWrap(readLocalBoolean(WORD_WRAP_KEY, true));
+    setShowIndentGuides(readLocalBoolean(INDENT_GUIDES_KEY, true));
   }, []);
 
   useEffect(() => {
@@ -275,6 +300,14 @@ export default function DiffTool() {
   useEffect(() => {
     window.localStorage.setItem(IGNORE_TRIM_KEY, String(ignoreTrimWhitespace));
   }, [ignoreTrimWhitespace]);
+
+  useEffect(() => {
+    window.localStorage.setItem(WORD_WRAP_KEY, String(wordWrap));
+  }, [wordWrap]);
+
+  useEffect(() => {
+    window.localStorage.setItem(INDENT_GUIDES_KEY, String(showIndentGuides));
+  }, [showIndentGuides]);
 
   const recalculateStats = (editorInstance?: MonacoEditor.IStandaloneDiffEditor | null) => {
     const activeEditor = editorInstance ?? diffEditorRef.current;
@@ -432,13 +465,23 @@ export default function DiffTool() {
             supported={fullscreenSupported}
           />
 
-          <button className="btn btnSecondary" onClick={() => originalFileInputRef.current?.click()}>
+          <button
+            className="btn btnSecondary"
+            onClick={() => originalFileInputRef.current?.click()}
+            aria-label="Load left file"
+            title="Load left file"
+          >
             <FileUp size={15} />
-            Load left
+            <span className={styles.btnLabel}>Load left</span>
           </button>
-          <button className="btn btnSecondary" onClick={() => modifiedFileInputRef.current?.click()}>
+          <button
+            className="btn btnSecondary"
+            onClick={() => modifiedFileInputRef.current?.click()}
+            aria-label="Load right file"
+            title="Load right file"
+          >
             <FileUp size={15} />
-            Load right
+            <span className={styles.btnLabel}>Load right</span>
           </button>
           <input
             ref={originalFileInputRef}
@@ -453,29 +496,44 @@ export default function DiffTool() {
             onChange={(event) => importFile(event, "modified")}
           />
 
-          <button className="btn btnSecondary" onClick={() => copyPane(original, "Original")}>
+          <button
+            className="btn btnSecondary"
+            onClick={() => copyPane(original, "Original")}
+            aria-label="Copy left pane"
+            title="Copy left pane"
+          >
             <Clipboard size={15} />
-            Copy left
+            <span className={styles.btnLabel}>Copy left</span>
           </button>
-          <button className="btn btnSecondary" onClick={() => copyPane(modified, "Modified")}>
+          <button
+            className="btn btnSecondary"
+            onClick={() => copyPane(modified, "Modified")}
+            aria-label="Copy right pane"
+            title="Copy right pane"
+          >
             <Clipboard size={15} />
-            Copy right
+            <span className={styles.btnLabel}>Copy right</span>
           </button>
-          <button className="btn btnSecondary" onClick={swapSides}>
+          <button className="btn btnSecondary" onClick={swapSides} aria-label="Swap panes" title="Swap panes">
             <ArrowLeftRight size={15} />
-            Swap
+            <span className={styles.btnLabel}>Swap</span>
           </button>
-          <button className="btn btnSecondary" onClick={downloadPatch}>
+          <button
+            className="btn btnSecondary"
+            onClick={downloadPatch}
+            aria-label="Export patch"
+            title="Export patch"
+          >
             <Download size={15} />
-            Export patch
+            <span className={styles.btnLabel}>Export patch</span>
           </button>
-          <button className="btn btnGhost" onClick={resetToSample}>
+          <button className="btn btnGhost" onClick={resetToSample} aria-label="Reset sample" title="Reset sample">
             <RotateCcw size={15} />
-            Reset sample
+            <span className={styles.btnLabel}>Reset sample</span>
           </button>
-          <button className="btn btnDanger" onClick={clearBoth}>
+          <button className="btn btnDanger" onClick={clearBoth} aria-label="Clear both panes" title="Clear both panes">
             <Eraser size={15} />
-            Clear
+            <span className={styles.btnLabel}>Clear</span>
           </button>
         </div>
       </header>
@@ -566,6 +624,24 @@ export default function DiffTool() {
           Ignore trim whitespace
         </label>
 
+        <label className={styles.toggleWrap}>
+          <input
+            type="checkbox"
+            checked={wordWrap}
+            onChange={(event) => setWordWrap(event.target.checked)}
+          />
+          Wrap long lines
+        </label>
+
+        <label className={styles.toggleWrap}>
+          <input
+            type="checkbox"
+            checked={showIndentGuides}
+            onChange={(event) => setShowIndentGuides(event.target.checked)}
+          />
+          Indent guides
+        </label>
+
         <span className={styles.notice} aria-hidden={!notice.text}>
           {notice.text}
         </span>
@@ -592,7 +668,10 @@ export default function DiffTool() {
             originalEditable: true,
             ignoreTrimWhitespace,
             minimap: { enabled: false },
-            wordWrap: "on",
+            wordWrap: wordWrap ? "on" : "off",
+            diffWordWrap: wordWrap ? "on" : "off",
+            wrappingIndent: wordWrap ? "same" : "none",
+            guides: { indentation: showIndentGuides },
             automaticLayout: true,
             fontSize: 13,
             fontFamily: "'IBM Plex Mono', Consolas, monospace",

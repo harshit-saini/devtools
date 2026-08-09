@@ -126,6 +126,21 @@
   }
 }
 
+@media (max-width: 760px) {
+  .btnLabel {
+    display: none;
+  }
+
+  .actions .btn {
+    padding: 0 10px;
+  }
+
+  .editorCard {
+    flex: none;
+    min-height: 420px;
+  }
+}
+
 @media (max-width: 640px) {
   .langGroup {
     width: 100%;
