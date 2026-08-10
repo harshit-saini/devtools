@@ -377,6 +377,13 @@ export default function DiffTool() {
       editorInstance.layout(lastMeasuredSizeRef.current);
     }
 
+    // Same reasoning as the wordWrapOverride2 effect further down: apply it here too, since this
+    // mount can happen before that effect's dependency has ever changed (nothing to react to on
+    // the very first render).
+    if (effectiveSideBySide) {
+      editorInstance.getOriginalEditor().updateOptions({ wordWrapOverride2: "inherit" });
+    }
+
     for (const disposable of disposablesRef.current) {
       disposable.dispose();
     }
@@ -484,6 +491,19 @@ export default function DiffTool() {
 
   const isIdentical = original === modified;
   const effectiveSideBySide = renderSideBySide && !isNarrowViewport;
+
+  // Monaco's diff editor has a real quirk: switching into inline mode sets the original (left)
+  // editor's internal wordWrapOverride2 to "off" to skip wrapping an editor that isn't visible,
+  // but switching back to side-by-side never resets it - only wordWrapOverride1 gets touched on
+  // that path. Left unfixed, the original pane silently stops wrapping (permanently, even after
+  // toggling side-by-side back on) the moment the diff editor has ever been in inline mode, which
+  // happens on every mobile-width mount. Clear it back to "inherit" so the original pane wraps
+  // exactly like the modified one whenever side-by-side is actually active.
+  useEffect(() => {
+    if (effectiveSideBySide) {
+      diffEditorRef.current?.getOriginalEditor().updateOptions({ wordWrapOverride2: "inherit" });
+    }
+  }, [effectiveSideBySide]);
 
   const similarity = useMemo(() => {
     const modifiedLineCount = modified.length === 0 ? 0 : modified.split("\n").length;
