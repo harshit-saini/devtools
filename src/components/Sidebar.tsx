@@ -53,7 +53,7 @@ const navItems: NavItem[] = [
   { name: "Diff Tool", href: "/diff", group: "Analyze", icon: FileDiff },
   { name: "CSV Viewer", href: "/csv", group: "Analyze", icon: Table2 },
   { name: "Base64 Encoder/Decoder", href: "/base64", group: "Analyze", icon: Binary },
-  { name: "JSON to YML", href: "/json-yaml", group: "Analyze", icon: ArrowRightLeft },
+  { name: "JSON to YAML", href: "/json-yaml", group: "Analyze", icon: ArrowRightLeft },
   { name: "HTTP Header Inspector", href: "/http-headers", group: "Analyze", icon: Network },
   { name: "UUID Generator", href: "/uuid-generator", group: "Analyze", icon: Fingerprint },
   { name: "Time Converter", href: "/time-converter", group: "Analyze", icon: Clock3 },

@@ -15,6 +15,16 @@ const sampleJson = `{
   }
 }`;
 
+const INPUT_KEY = "devtools.json.input";
+
+function readLocalString(key: string, fallback: string): string {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  return window.localStorage.getItem(key) ?? fallback;
+}
+
 function sortJsonValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(sortJsonValue);
@@ -39,11 +49,24 @@ function sortJsonValue(value: unknown): unknown {
 export default function JsonFormatterPage() {
   const { containerRef, isFullscreen, fullscreenSupported, toggleFullscreen } =
     useToolFullscreen<HTMLDivElement>();
+  // Initial state intentionally matches what the server renders (the hardcoded sample, not
+  // localStorage) so hydration never mismatches. Saved value is restored once, after mount, below.
   const [input, setInput] = useState(sampleJson);
   const [output, setOutput] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [indent, setIndent] = useState(2);
+
+  useEffect(() => {
+    setInput(readLocalString(INPUT_KEY, sampleJson));
+  }, []);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      window.localStorage.setItem(INPUT_KEY, input);
+    }, 400);
+    return () => window.clearTimeout(timeoutId);
+  }, [input]);
 
   useEffect(() => {
     if (!notice) {
@@ -157,6 +180,9 @@ export default function JsonFormatterPage() {
       <div className="toolMetaRow">
         {notice && <span className={styles.notice}>{notice}</span>}
         {error && <span className={styles.error}>{error}</span>}
+        <span role="status" aria-live="polite" className={styles.srOnly}>
+          {notice || error}
+        </span>
       </div>
 
       <div className={styles.grid}>

@@ -94,7 +94,7 @@ export const siteRoutes: SiteRoute[] = [
   },
   {
     path: "/json-yaml",
-    name: "JSON to YML",
+    name: "JSON to YAML",
     description: "Convert JSON to YAML in-browser.",
     changeFrequency: "weekly",
     priority: 0.8,
