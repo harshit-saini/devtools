@@ -5,6 +5,7 @@ import { Braces, Clipboard, Minimize2, Sparkles, WandSparkles } from "lucide-rea
 import styles from "./json.module.css";
 import ToolFullscreenButton from "@/components/ToolFullscreenButton";
 import { useToolFullscreen } from "@/components/useToolFullscreen";
+import { useDebouncedLocalStorageState } from "@/lib/useLocalStorageState";
 
 const sampleJson = `{
   "service": "devtool-deck",
@@ -16,14 +17,6 @@ const sampleJson = `{
 }`;
 
 const INPUT_KEY = "devtools.json.input";
-
-function readLocalString(key: string, fallback: string): string {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
-  return window.localStorage.getItem(key) ?? fallback;
-}
 
 function sortJsonValue(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -50,23 +43,14 @@ export default function JsonFormatterPage() {
   const { containerRef, isFullscreen, fullscreenSupported, toggleFullscreen } =
     useToolFullscreen<HTMLDivElement>();
   // Initial state intentionally matches what the server renders (the hardcoded sample, not
-  // localStorage) so hydration never mismatches. Saved value is restored once, after mount, below.
-  const [input, setInput] = useState(sampleJson);
+  // localStorage) so hydration never mismatches. useDebouncedLocalStorageState restores the
+  // saved value once after mount (via its own render-phase resync rather than an effect) and
+  // debounces writes back to localStorage.
+  const [input, setInput] = useDebouncedLocalStorageState(INPUT_KEY, sampleJson, (raw) => raw, 400);
   const [output, setOutput] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [indent, setIndent] = useState(2);
-
-  useEffect(() => {
-    setInput(readLocalString(INPUT_KEY, sampleJson));
-  }, []);
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      window.localStorage.setItem(INPUT_KEY, input);
-    }, 400);
-    return () => window.clearTimeout(timeoutId);
-  }, [input]);
 
   useEffect(() => {
     if (!notice) {

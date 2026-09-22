@@ -5,6 +5,7 @@ import { Clipboard, Dices, Download, Fingerprint, RotateCcw } from "lucide-react
 import styles from "./uuid-generator.module.css";
 import ToolFullscreenButton from "@/components/ToolFullscreenButton";
 import { useToolFullscreen } from "@/components/useToolFullscreen";
+import { useIsMountedOnClient, useLocalStorageState } from "@/lib/useLocalStorageState";
 
 type UuidVersion = "v4" | "v7";
 type WrapStyle = "none" | "braces" | "quotes";
@@ -19,21 +20,16 @@ const UPPERCASE_KEY = "devtools.uuidGenerator.uppercase";
 const HYPHENS_KEY = "devtools.uuidGenerator.hyphens";
 const WRAP_KEY = "devtools.uuidGenerator.wrap";
 
-function readLocalString(key: string, fallback: string): string {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
-  return window.localStorage.getItem(key) ?? fallback;
+function parseUuidVersion(raw: string): UuidVersion {
+  return raw === "v7" ? "v7" : "v4";
 }
 
-function readLocalBoolean(key: string, fallback: boolean): boolean {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
+function parseWrapStyle(raw: string): WrapStyle {
+  return raw === "braces" || raw === "quotes" ? raw : "none";
+}
 
-  const stored = window.localStorage.getItem(key);
-  return stored === null ? fallback : stored === "true";
+function parseBoolean(raw: string): boolean {
+  return raw === "true";
 }
 
 function timestampByte(timestamp: number, byteShift: number): number {
@@ -79,6 +75,10 @@ function clampCount(value: number): number {
   return Math.min(MAX_COUNT, Math.max(MIN_COUNT, Math.round(value)));
 }
 
+function parseCount(raw: string): number {
+  return clampCount(Number(raw));
+}
+
 function formatUuid(raw: string, uppercase: boolean, hyphens: boolean, wrap: WrapStyle): string {
   let value = hyphens ? raw : raw.replace(/-/g, "");
   value = uppercase ? value.toUpperCase() : value;
@@ -102,45 +102,23 @@ export default function UuidGeneratorPage() {
   // localStorage) so hydration never mismatches. rawItems starts empty for the same reason:
   // crypto.randomUUID() also runs during SSR, so generating the sample batch during the initial
   // render would bake one random set into the server HTML and produce a different one on the
-  // client's hydration render. Real values are restored/generated once, after mount, below.
-  const [version, setVersion] = useState<UuidVersion>("v4");
-  const [count, setCount] = useState(DEFAULT_COUNT);
-  const [uppercase, setUppercase] = useState(false);
-  const [hyphens, setHyphens] = useState(true);
-  const [wrap, setWrap] = useState<WrapStyle>("none");
+  // client's hydration render. Real values are restored/generated once, after mount, below - via
+  // useSyncExternalStore-backed hooks and a render-phase update, not a setState call inside an
+  // effect.
+  const [version, setVersion] = useLocalStorageState<UuidVersion>(VERSION_KEY, "v4", parseUuidVersion);
+  const [count, setCount] = useLocalStorageState(COUNT_KEY, DEFAULT_COUNT, parseCount);
+  const [uppercase, setUppercase] = useLocalStorageState(UPPERCASE_KEY, false, parseBoolean);
+  const [hyphens, setHyphens] = useLocalStorageState(HYPHENS_KEY, true, parseBoolean);
+  const [wrap, setWrap] = useLocalStorageState<WrapStyle>(WRAP_KEY, "none", parseWrapStyle);
   const [rawItems, setRawItems] = useState<string[]>([]);
+  const [hasGeneratedInitialBatch, setHasGeneratedInitialBatch] = useState(false);
   const [notice, setNotice] = useState("");
+  const isMountedOnClient = useIsMountedOnClient();
 
-  useEffect(() => {
-    const storedVersion = readLocalString(VERSION_KEY, "v4");
-    setVersion(storedVersion === "v7" ? "v7" : "v4");
-    setCount(clampCount(Number(readLocalString(COUNT_KEY, String(DEFAULT_COUNT)))));
-    setUppercase(readLocalBoolean(UPPERCASE_KEY, false));
-    setHyphens(readLocalBoolean(HYPHENS_KEY, true));
-    const storedWrap = readLocalString(WRAP_KEY, "none");
-    setWrap(storedWrap === "braces" || storedWrap === "quotes" ? storedWrap : "none");
+  if (isMountedOnClient && !hasGeneratedInitialBatch) {
+    setHasGeneratedInitialBatch(true);
     setRawItems(Array.from({ length: DEFAULT_COUNT }, () => generateUuid("v4")));
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem(VERSION_KEY, version);
-  }, [version]);
-
-  useEffect(() => {
-    window.localStorage.setItem(COUNT_KEY, String(count));
-  }, [count]);
-
-  useEffect(() => {
-    window.localStorage.setItem(UPPERCASE_KEY, String(uppercase));
-  }, [uppercase]);
-
-  useEffect(() => {
-    window.localStorage.setItem(HYPHENS_KEY, String(hyphens));
-  }, [hyphens]);
-
-  useEffect(() => {
-    window.localStorage.setItem(WRAP_KEY, wrap);
-  }, [wrap]);
+  }
 
   useEffect(() => {
     if (!notice) {

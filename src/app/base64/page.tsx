@@ -5,6 +5,7 @@ import { ArrowLeftRight, Binary, Clipboard, Trash2 } from "lucide-react";
 import styles from "./base64.module.css";
 import ToolFullscreenButton from "@/components/ToolFullscreenButton";
 import { useToolFullscreen } from "@/components/useToolFullscreen";
+import { useStoredSnapshot } from "@/lib/useLocalStorageState";
 
 const SAMPLE_PLAIN_TEXT = "Hello, DevTool Deck!";
 const PLAIN_KEY = "devtools.base64.plain";
@@ -17,32 +18,27 @@ function decodeBase64(value: string): string {
   return decodeURIComponent(escape(atob(value)));
 }
 
-function readLocalString(key: string, fallback: string): string {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
-  return window.localStorage.getItem(key) ?? fallback;
-}
-
 export default function Base64Tool() {
   const { containerRef, isFullscreen, fullscreenSupported, toggleFullscreen } = useToolFullscreen<HTMLDivElement>();
   // Initial state intentionally matches what the server renders (the hardcoded sample, not
-  // localStorage) so hydration never mismatches. Saved value is restored once, after mount, below.
+  // localStorage) so hydration never mismatches. restoredPlainText only reflects the saved value
+  // once useStoredSnapshot resyncs after mount; the seed check below then applies it once.
+  const restoredPlainText = useStoredSnapshot(PLAIN_KEY, SAMPLE_PLAIN_TEXT, (raw) => raw);
   const [plainText, setPlainText] = useState(SAMPLE_PLAIN_TEXT);
   const [base64Text, setBase64Text] = useState(() => encodeBase64(SAMPLE_PLAIN_TEXT));
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [seededPlainText, setSeededPlainText] = useState(SAMPLE_PLAIN_TEXT);
 
-  useEffect(() => {
-    const storedPlain = readLocalString(PLAIN_KEY, SAMPLE_PLAIN_TEXT);
-    setPlainText(storedPlain);
+  if (restoredPlainText !== seededPlainText) {
+    setSeededPlainText(restoredPlainText);
+    setPlainText(restoredPlainText);
     try {
-      setBase64Text(encodeBase64(storedPlain));
+      setBase64Text(encodeBase64(restoredPlainText));
     } catch {
       setBase64Text("");
     }
-  }, []);
+  }
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {

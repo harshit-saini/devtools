@@ -18,6 +18,7 @@ import {
 import styles from "./diff.module.css";
 import ToolFullscreenButton from "@/components/ToolFullscreenButton";
 import { useToolFullscreen } from "@/components/useToolFullscreen";
+import { useDebouncedLocalStorageState, useLocalStorageState } from "@/lib/useLocalStorageState";
 
 type DiffStats = {
   changedBlocks: number;
@@ -72,26 +73,8 @@ function getViewportServerSnapshot() {
   return false;
 }
 
-function readLocalString(key: string, fallback: string): string {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
-  const stored = window.localStorage.getItem(key);
-  return stored ?? fallback;
-}
-
-function readLocalBoolean(key: string, fallback: boolean): boolean {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
-  const stored = window.localStorage.getItem(key);
-  if (stored === null) {
-    return fallback;
-  }
-
-  return stored === "true";
+function parseBoolean(raw: string): boolean {
+  return raw === "true";
 }
 
 function calculateStats(changes: readonly MonacoEditor.ILineChange[] | null): DiffStats {
@@ -203,16 +186,27 @@ export default function DiffTool() {
     useToolFullscreen<HTMLDivElement>();
 
   // Initial state below intentionally matches what the server renders (hardcoded defaults, not
-  // localStorage) so hydration never mismatches. Saved values are restored once, after mount,
-  // in the effect further down — see the comment there.
-  const [original, setOriginal] = useState(defaultOriginal);
-  const [modified, setModified] = useState(defaultModified);
-  const [originalLanguage, setOriginalLanguage] = useState("typescript");
-  const [modifiedLanguage, setModifiedLanguage] = useState("typescript");
-  const [renderSideBySide, setRenderSideBySide] = useState(true);
-  const [ignoreTrimWhitespace, setIgnoreTrimWhitespace] = useState(false);
-  const [wordWrap, setWordWrap] = useState(true);
-  const [showIndentGuides, setShowIndentGuides] = useState(true);
+  // localStorage) so hydration never mismatches. useLocalStorageState restores each saved value
+  // once, after mount, via its own render-phase resync rather than a setState call inside an
+  // effect — see useLocalStorageState's own comment for why.
+  const [original, setOriginal] = useDebouncedLocalStorageState(
+    ORIGINAL_KEY,
+    defaultOriginal,
+    (raw) => raw,
+    SAVE_DEBOUNCE_MS,
+  );
+  const [modified, setModified] = useDebouncedLocalStorageState(
+    MODIFIED_KEY,
+    defaultModified,
+    (raw) => raw,
+    SAVE_DEBOUNCE_MS,
+  );
+  const [originalLanguage, setOriginalLanguage] = useLocalStorageState(ORIGINAL_LANG_KEY, "typescript", (raw) => raw);
+  const [modifiedLanguage, setModifiedLanguage] = useLocalStorageState(MODIFIED_LANG_KEY, "typescript", (raw) => raw);
+  const [renderSideBySide, setRenderSideBySide] = useLocalStorageState(SIDE_BY_SIDE_KEY, true, parseBoolean);
+  const [ignoreTrimWhitespace, setIgnoreTrimWhitespace] = useLocalStorageState(IGNORE_TRIM_KEY, false, parseBoolean);
+  const [wordWrap, setWordWrap] = useLocalStorageState(WORD_WRAP_KEY, true, parseBoolean);
+  const [showIndentGuides, setShowIndentGuides] = useLocalStorageState(INDENT_GUIDES_KEY, true, parseBoolean);
   const isNarrowViewport = useSyncExternalStore(
     subscribeToViewport,
     getViewportSnapshot,
@@ -304,59 +298,6 @@ export default function DiffTool() {
 
     return () => window.clearTimeout(timeoutId);
   }, [notice]);
-
-  // Runs once after mount to restore anything saved from a previous visit. This must happen
-  // after mount (not in the initial useState above) so the client's first render still matches
-  // the server-rendered defaults - reading localStorage during the initial render would mismatch
-  // hydration whenever a saved value differs from the hardcoded default.
-  useEffect(() => {
-    setOriginal(readLocalString(ORIGINAL_KEY, defaultOriginal));
-    setModified(readLocalString(MODIFIED_KEY, defaultModified));
-    setOriginalLanguage(readLocalString(ORIGINAL_LANG_KEY, "typescript"));
-    setModifiedLanguage(readLocalString(MODIFIED_LANG_KEY, "typescript"));
-    setRenderSideBySide(readLocalBoolean(SIDE_BY_SIDE_KEY, true));
-    setIgnoreTrimWhitespace(readLocalBoolean(IGNORE_TRIM_KEY, false));
-    setWordWrap(readLocalBoolean(WORD_WRAP_KEY, true));
-    setShowIndentGuides(readLocalBoolean(INDENT_GUIDES_KEY, true));
-  }, []);
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      window.localStorage.setItem(ORIGINAL_KEY, original);
-    }, SAVE_DEBOUNCE_MS);
-    return () => window.clearTimeout(timeoutId);
-  }, [original]);
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      window.localStorage.setItem(MODIFIED_KEY, modified);
-    }, SAVE_DEBOUNCE_MS);
-    return () => window.clearTimeout(timeoutId);
-  }, [modified]);
-
-  useEffect(() => {
-    window.localStorage.setItem(ORIGINAL_LANG_KEY, originalLanguage);
-  }, [originalLanguage]);
-
-  useEffect(() => {
-    window.localStorage.setItem(MODIFIED_LANG_KEY, modifiedLanguage);
-  }, [modifiedLanguage]);
-
-  useEffect(() => {
-    window.localStorage.setItem(SIDE_BY_SIDE_KEY, String(renderSideBySide));
-  }, [renderSideBySide]);
-
-  useEffect(() => {
-    window.localStorage.setItem(IGNORE_TRIM_KEY, String(ignoreTrimWhitespace));
-  }, [ignoreTrimWhitespace]);
-
-  useEffect(() => {
-    window.localStorage.setItem(WORD_WRAP_KEY, String(wordWrap));
-  }, [wordWrap]);
-
-  useEffect(() => {
-    window.localStorage.setItem(INDENT_GUIDES_KEY, String(showIndentGuides));
-  }, [showIndentGuides]);
 
   const recalculateStats = (editorInstance?: MonacoEditor.IStandaloneDiffEditor | null) => {
     const activeEditor = editorInstance ?? diffEditorRef.current;
