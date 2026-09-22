@@ -42,11 +42,23 @@ function formatSavedAt(value: number | null): string {
 export default function Notepad() {
   const { containerRef, isFullscreen, fullscreenSupported, toggleFullscreen } =
     useToolFullscreen<HTMLDivElement>();
-  const [content, setContent] = useState<string>(() => readLocalString(CONTENT_KEY));
+  // Initial state below intentionally matches what the server renders (empty/null, not
+  // localStorage) so hydration never mismatches. Saved values are restored once, after mount, in
+  // the effect further down.
+  const [content, setContent] = useState<string>("");
   const [isPendingSave, setIsPendingSave] = useState(false);
-  const [lastSavedAt, setLastSavedAt] = useState<number | null>(() => readLocalNumber(SAVED_AT_KEY));
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [notice, setNotice] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const contentRef = useRef(content);
+  const isPendingSaveRef = useRef(isPendingSave);
+  contentRef.current = content;
+  isPendingSaveRef.current = isPendingSave;
+
+  useEffect(() => {
+    setContent(readLocalString(CONTENT_KEY));
+    setLastSavedAt(readLocalNumber(SAVED_AT_KEY));
+  }, []);
 
   useEffect(() => {
     if (!isPendingSave) {
@@ -63,6 +75,18 @@ export default function Notepad() {
 
     return () => window.clearTimeout(timeoutId);
   }, [content, isPendingSave]);
+
+  // Flushes a still-pending debounced save on unmount (e.g. navigating away mid-debounce), since
+  // the effect above's cleanup only clears the pending timer rather than persisting first. Empty
+  // deps so this cleanup fires only on unmount, not on every keystroke.
+  useEffect(() => {
+    return () => {
+      if (isPendingSaveRef.current) {
+        window.localStorage.setItem(CONTENT_KEY, contentRef.current);
+        window.localStorage.setItem(SAVED_AT_KEY, String(Date.now()));
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!notice) {
@@ -127,6 +151,11 @@ export default function Notepad() {
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) {
+      return;
+    }
+
+    if (content.trim() && !window.confirm("Importing will replace your current note. Continue?")) {
+      event.target.value = "";
       return;
     }
 
@@ -197,6 +226,9 @@ export default function Notepad() {
         <span className="statusChip">Lines: {stats.lines}</span>
         <span className="statusChip">Characters: {stats.characters}</span>
         {notice && <span className={styles.notice}>{notice}</span>}
+        <span role="status" aria-live="polite" className={styles.srOnly}>
+          {notice}
+        </span>
       </div>
 
       <section className={`${styles.editorCard} panel`}>

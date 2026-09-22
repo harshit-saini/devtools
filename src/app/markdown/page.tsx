@@ -5,9 +5,11 @@ import { Clipboard, Download, Eye, FileText, FileUp, Split, SquarePen, Trash2 } 
 import styles from "./markdown.module.css";
 import ToolFullscreenButton from "@/components/ToolFullscreenButton";
 import { useToolFullscreen } from "@/components/useToolFullscreen";
+import { markdownToHtml } from "@/lib/markdown";
 
 const CONTENT_KEY = "devtools.markdown.content";
 const SAVED_AT_KEY = "devtools.markdown.savedAt";
+const DEFAULT_CONTENT = "# Markdown Tool\n\nStart writing...";
 
 type PreviewMode = "write" | "preview" | "split";
 
@@ -33,149 +35,6 @@ function readLocalNumber(key: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function applyInlineMarkdown(text: string): string {
-  const escaped = escapeHtml(text);
-
-  return escaped
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/__([^_]+)__/g, "<strong>$1</strong>")
-    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
-    .replace(/_([^_]+)_/g, "<em>$1</em>")
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
-}
-
-function markdownToHtml(markdown: string): string {
-  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
-  const html: string[] = [];
-
-  let inCodeBlock = false;
-  let codeLang = "";
-  let inUl = false;
-  let inOl = false;
-  let inBlockquote = false;
-
-  const closeLists = () => {
-    if (inUl) {
-      html.push("</ul>");
-      inUl = false;
-    }
-
-    if (inOl) {
-      html.push("</ol>");
-      inOl = false;
-    }
-  };
-
-  const closeBlockquote = () => {
-    if (inBlockquote) {
-      html.push("</blockquote>");
-      inBlockquote = false;
-    }
-  };
-
-  for (const line of lines) {
-    if (line.startsWith("```")) {
-      closeLists();
-      closeBlockquote();
-
-      if (!inCodeBlock) {
-        codeLang = line.slice(3).trim();
-        html.push(`<pre><code${codeLang ? ` class=\"language-${escapeHtml(codeLang)}\"` : ""}>`);
-        inCodeBlock = true;
-      } else {
-        html.push("</code></pre>");
-        inCodeBlock = false;
-        codeLang = "";
-      }
-      continue;
-    }
-
-    if (inCodeBlock) {
-      html.push(`${escapeHtml(line)}\n`);
-      continue;
-    }
-
-    if (/^\s*$/.test(line)) {
-      closeLists();
-      closeBlockquote();
-      continue;
-    }
-
-    const heading = line.match(/^(#{1,6})\s+(.*)$/);
-    if (heading) {
-      closeLists();
-      closeBlockquote();
-      const level = heading[1].length;
-      html.push(`<h${level}>${applyInlineMarkdown(heading[2])}</h${level}>`);
-      continue;
-    }
-
-    if (/^---+$/.test(line.trim())) {
-      closeLists();
-      closeBlockquote();
-      html.push("<hr />");
-      continue;
-    }
-
-    const blockquote = line.match(/^>\s?(.*)$/);
-    if (blockquote) {
-      closeLists();
-      if (!inBlockquote) {
-        html.push("<blockquote>");
-        inBlockquote = true;
-      }
-      html.push(`<p>${applyInlineMarkdown(blockquote[1])}</p>`);
-      continue;
-    }
-
-    closeBlockquote();
-
-    const unorderedItem = line.match(/^[-*+]\s+(.*)$/);
-    if (unorderedItem) {
-      if (!inUl) {
-        closeLists();
-        html.push("<ul>");
-        inUl = true;
-      }
-      html.push(`<li>${applyInlineMarkdown(unorderedItem[1])}</li>`);
-      continue;
-    }
-
-    const orderedItem = line.match(/^\d+\.\s+(.*)$/);
-    if (orderedItem) {
-      if (!inOl) {
-        closeLists();
-        html.push("<ol>");
-        inOl = true;
-      }
-      html.push(`<li>${applyInlineMarkdown(orderedItem[1])}</li>`);
-      continue;
-    }
-
-    closeLists();
-    html.push(`<p>${applyInlineMarkdown(line)}</p>`);
-  }
-
-  closeLists();
-  closeBlockquote();
-
-  if (inCodeBlock) {
-    html.push("</code></pre>");
-  }
-
-  return html.join("\n");
-}
-
 function formatSavedAt(value: number | null): string {
   if (!value) {
     return "Draft ready";
@@ -188,12 +47,24 @@ export default function MarkdownToolPage() {
   const { containerRef, isFullscreen, fullscreenSupported, toggleFullscreen } =
     useToolFullscreen<HTMLDivElement>();
 
-  const [content, setContent] = useState<string>(() => readLocalString(CONTENT_KEY, "# Markdown Tool\n\nStart writing..."));
+  // Initial state below intentionally matches what the server renders (the hardcoded default, not
+  // localStorage) so hydration never mismatches. Saved values are restored once, after mount, in
+  // the effect further down.
+  const [content, setContent] = useState<string>(DEFAULT_CONTENT);
   const [previewMode, setPreviewMode] = useState<PreviewMode>("split");
   const [notice, setNotice] = useState("");
   const [isPendingSave, setIsPendingSave] = useState(false);
-  const [lastSavedAt, setLastSavedAt] = useState<number | null>(() => readLocalNumber(SAVED_AT_KEY));
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const contentRef = useRef(content);
+  const isPendingSaveRef = useRef(isPendingSave);
+  contentRef.current = content;
+  isPendingSaveRef.current = isPendingSave;
+
+  useEffect(() => {
+    setContent(readLocalString(CONTENT_KEY, DEFAULT_CONTENT));
+    setLastSavedAt(readLocalNumber(SAVED_AT_KEY));
+  }, []);
 
   useEffect(() => {
     if (!isPendingSave) {
@@ -210,6 +81,18 @@ export default function MarkdownToolPage() {
 
     return () => window.clearTimeout(timeoutId);
   }, [content, isPendingSave]);
+
+  // Flushes a still-pending debounced save on unmount (e.g. navigating away mid-debounce), since
+  // the effect above's cleanup only clears the pending timer rather than persisting first. Empty
+  // deps so this cleanup fires only on unmount, not on every keystroke.
+  useEffect(() => {
+    return () => {
+      if (isPendingSaveRef.current) {
+        window.localStorage.setItem(CONTENT_KEY, contentRef.current);
+        window.localStorage.setItem(SAVED_AT_KEY, String(Date.now()));
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!notice) {
@@ -278,6 +161,11 @@ export default function MarkdownToolPage() {
       return;
     }
 
+    if (content.trim() && !window.confirm("Importing will replace your current document. Continue?")) {
+      event.target.value = "";
+      return;
+    }
+
     try {
       const text = await file.text();
       handleChange(text);
@@ -314,6 +202,7 @@ export default function MarkdownToolPage() {
           <button
             className={`btn btnSecondary ${previewMode === "write" ? styles.modeActive : ""}`}
             onClick={() => setPreviewMode("write")}
+            aria-pressed={previewMode === "write"}
           >
             <SquarePen size={15} />
             Write
@@ -321,6 +210,7 @@ export default function MarkdownToolPage() {
           <button
             className={`btn btnSecondary ${previewMode === "split" ? styles.modeActive : ""}`}
             onClick={() => setPreviewMode("split")}
+            aria-pressed={previewMode === "split"}
           >
             <Split size={15} />
             Split
@@ -328,6 +218,7 @@ export default function MarkdownToolPage() {
           <button
             className={`btn btnSecondary ${previewMode === "preview" ? styles.modeActive : ""}`}
             onClick={() => setPreviewMode("preview")}
+            aria-pressed={previewMode === "preview"}
           >
             <Eye size={15} />
             Preview
@@ -358,6 +249,9 @@ export default function MarkdownToolPage() {
         <span className="statusChip">Lines: {stats.lines}</span>
         <span className="statusChip">Characters: {stats.characters}</span>
         {notice && <span className={styles.notice}>{notice}</span>}
+        <span role="status" aria-live="polite" className={styles.srOnly}>
+          {notice}
+        </span>
       </div>
 
       <section className={`${styles.workspace} panel`}>

@@ -79,6 +79,30 @@
   font-size: 0.84rem;
 }
 
+.secretRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.secretToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(20, 36, 50, 0.14);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-muted);
+}
+
+.secretToggle:hover {
+  color: var(--accent-strong);
+  border-color: rgba(15, 118, 110, 0.3);
+}
+
 .validationList {
   margin: 0;
   padding-left: 20px;

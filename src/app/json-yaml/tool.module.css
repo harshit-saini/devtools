@@ -5,7 +5,21 @@
 .cardHead { display: flex; justify-content: space-between; align-items: center; }
 .textarea {
   width: 100%; min-height: 240px; border-radius: 12px; border: 1px solid var(--border-color);
-  background: rgba(6, 10, 18, 0.65); color: var(--foreground); padding: 0.85rem; resize: vertical;
+  background: rgba(20, 26, 33, 0.94); color: #e6f4f1; font-family: "IBM Plex Mono", Consolas, monospace;
+  padding: 0.85rem; resize: vertical;
 }
-.errorChip { color: #fecaca; }
+.errorChip {
+  display: inline-flex; align-items: center; min-height: 30px; padding: 0 10px; border-radius: 999px;
+  border: 1px solid rgba(190, 18, 60, 0.24); background: rgba(190, 18, 60, 0.12); color: var(--danger);
+  font-size: 0.8rem; font-weight: 700;
+}
+.notice {
+  display: inline-flex; align-items: center; min-height: 30px; padding: 0 10px; border-radius: 999px;
+  border: 1px solid rgba(15, 118, 110, 0.2); background: rgba(15, 118, 110, 0.14); color: var(--accent-strong);
+  font-size: 0.8rem; font-weight: 700;
+}
+.srOnly {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
 @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }

@@ -132,20 +132,51 @@ function hasVisibleElements(elements: ExcalidrawInitialDataState["elements"] | u
 }
 
 export default function ExcalidrawWrapper() {
+  // Excalidraw itself only ever renders client-side (dynamic import with ssr: false), so passing
+  // localStorage-derived initialData to it isn't a hydration hazard. lastSavedAt/canRestore below
+  // are different: they drive text and a disabled attribute in markup that IS server-rendered, so
+  // they start at server-safe defaults and get the real values restored after mount.
   const initialData = useMemo(() => readStoredScene(), []);
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const saveTimeoutRef = useRef<number | null>(null);
+  const pendingSaveRef = useRef<{
+    elements: SceneElements;
+    appState: AppState;
+    files: BinaryFiles;
+  } | null>(null);
   const skipNextPersistRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [lastSavedAt, setLastSavedAt] = useState<number | null>(() => readSavedAt());
-  const [canRestore, setCanRestore] = useState(hasVisibleElements(initialData?.elements));
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [canRestore, setCanRestore] = useState(false);
   const [notice, setNotice] = useState("");
 
+  useEffect(() => {
+    setLastSavedAt(readSavedAt());
+    setCanRestore(hasVisibleElements(initialData?.elements));
+  }, [initialData]);
+
+  // Flushes a still-pending debounced autosave on unmount (e.g. navigating away right after a
+  // stroke), since the cleanup below only clears the pending timer rather than persisting first.
   useEffect(() => {
     return () => {
       if (saveTimeoutRef.current) {
         window.clearTimeout(saveTimeoutRef.current);
+      }
+
+      const pending = pendingSaveRef.current;
+      if (pending) {
+        try {
+          const payload: StoredScene = {
+            elements: pending.elements,
+            appState: toStorableAppState(pending.appState),
+            files: pending.files,
+          };
+          window.localStorage.setItem(SCENE_KEY, JSON.stringify(payload));
+          window.localStorage.setItem(SAVED_AT_KEY, String(Date.now()));
+        } catch {
+          // Best-effort flush on unmount; nothing to surface the failure to at this point.
+        }
       }
     };
   }, []);
@@ -172,6 +203,8 @@ export default function ExcalidrawWrapper() {
       return;
     }
 
+    pendingSaveRef.current = { elements, appState, files };
+
     if (saveTimeoutRef.current) {
       window.clearTimeout(saveTimeoutRef.current);
     }
@@ -189,6 +222,7 @@ export default function ExcalidrawWrapper() {
         window.localStorage.setItem(SAVED_AT_KEY, String(now));
         setLastSavedAt(now);
         setCanRestore(hasVisibleElements(elements));
+        pendingSaveRef.current = null;
       } catch {
         setNotice("Autosave failed");
       }
@@ -210,6 +244,12 @@ export default function ExcalidrawWrapper() {
         elements: restored.elements,
         appState: restored.appState as UpdateSceneInput["appState"],
       };
+
+      if (saveTimeoutRef.current) {
+        window.clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+      pendingSaveRef.current = null;
 
       skipNextPersistRef.current = true;
       api.updateScene(updatePayload);
@@ -273,6 +313,11 @@ export default function ExcalidrawWrapper() {
       return;
     }
 
+    if (canRestore && !window.confirm("Importing will replace your current drawing. Continue?")) {
+      event.target.value = "";
+      return;
+    }
+
     try {
       const text = await file.text();
       const parsedScene = extractStoredScene(JSON.parse(text));
@@ -321,6 +366,7 @@ export default function ExcalidrawWrapper() {
       window.clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = null;
     }
+    pendingSaveRef.current = null;
 
     skipNextPersistRef.current = true;
     api.resetScene();
@@ -338,6 +384,9 @@ export default function ExcalidrawWrapper() {
           <span className="statusChip">Autosave enabled</span>
           <span className="statusChip">{formatSavedAt(lastSavedAt)}</span>
           {notice && <span className={styles.notice}>{notice}</span>}
+          <span role="status" aria-live="polite" className={styles.srOnly}>
+            {notice}
+          </span>
         </div>
 
         <div className={styles.actions}>

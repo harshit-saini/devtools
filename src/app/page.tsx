@@ -101,7 +101,7 @@ const tools: ToolCard[] = [
     highlights: ["ag-Grid", "JSON export"],
   },
   {
-    name: "JSON to YML",
+    name: "JSON to YAML",
     description: "Convert JSON data to YAML format without leaving your browser.",
     href: "/json-yaml",
     category: "Analyze",

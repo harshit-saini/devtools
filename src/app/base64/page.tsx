@@ -1,10 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowLeftRight, Binary, Clipboard, Trash2 } from "lucide-react";
 import styles from "./base64.module.css";
 import ToolFullscreenButton from "@/components/ToolFullscreenButton";
 import { useToolFullscreen } from "@/components/useToolFullscreen";
+
+const SAMPLE_PLAIN_TEXT = "Hello, DevTool Deck!";
+const PLAIN_KEY = "devtools.base64.plain";
 
 function encodeBase64(value: string): string {
   return btoa(unescape(encodeURIComponent(value)));
@@ -14,11 +17,48 @@ function decodeBase64(value: string): string {
   return decodeURIComponent(escape(atob(value)));
 }
 
+function readLocalString(key: string, fallback: string): string {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  return window.localStorage.getItem(key) ?? fallback;
+}
+
 export default function Base64Tool() {
   const { containerRef, isFullscreen, fullscreenSupported, toggleFullscreen } = useToolFullscreen<HTMLDivElement>();
-  const [plainText, setPlainText] = useState("");
-  const [base64Text, setBase64Text] = useState("");
+  // Initial state intentionally matches what the server renders (the hardcoded sample, not
+  // localStorage) so hydration never mismatches. Saved value is restored once, after mount, below.
+  const [plainText, setPlainText] = useState(SAMPLE_PLAIN_TEXT);
+  const [base64Text, setBase64Text] = useState(() => encodeBase64(SAMPLE_PLAIN_TEXT));
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    const storedPlain = readLocalString(PLAIN_KEY, SAMPLE_PLAIN_TEXT);
+    setPlainText(storedPlain);
+    try {
+      setBase64Text(encodeBase64(storedPlain));
+    } catch {
+      setBase64Text("");
+    }
+  }, []);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      window.localStorage.setItem(PLAIN_KEY, plainText);
+    }, 400);
+    return () => window.clearTimeout(timeoutId);
+  }, [plainText]);
+
+  useEffect(() => {
+    if (!notice) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => setNotice(""), 1600);
+    return () => window.clearTimeout(timeoutId);
+  }, [notice]);
 
   const stats = useMemo(
     () => ({ plain: plainText.length, encoded: base64Text.length }),
@@ -49,15 +89,31 @@ export default function Base64Tool() {
     setError("");
   };
 
+  const loadSample = () => {
+    setPlainText(SAMPLE_PLAIN_TEXT);
+    setBase64Text(encodeBase64(SAMPLE_PLAIN_TEXT));
+    setError("");
+    setNotice("Sample loaded");
+  };
+
   const clearAll = () => {
     setPlainText("");
     setBase64Text("");
     setError("");
   };
 
-  const copyValue = async (value: string) => {
-    if (!value) return;
-    await navigator.clipboard.writeText(value);
+  const copyValue = async (value: string, label: string) => {
+    if (!value) {
+      setNotice(`No ${label.toLowerCase()} to copy`);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(value);
+      setNotice(`${label} copied`);
+    } catch {
+      setNotice("Clipboard copy failed");
+    }
   };
 
   return (
@@ -75,6 +131,7 @@ export default function Base64Tool() {
           <button className="btn btnSecondary" onClick={handleEncode}>Encode</button>
           <button className="btn btnSecondary" onClick={handleDecode}>Decode</button>
           <button className="btn btnSecondary" onClick={handleSwap}><ArrowLeftRight size={15} />Swap</button>
+          <button className="btn btnSecondary" onClick={loadSample}>Load sample</button>
           <button className="btn btnDanger" onClick={clearAll}><Trash2 size={15} />Clear</button>
         </div>
       </header>
@@ -83,13 +140,17 @@ export default function Base64Tool() {
         <span className="statusChip">Input chars: {stats.plain}</span>
         <span className="statusChip">Base64 chars: {stats.encoded}</span>
         {error && <span className={styles.errorChip}>{error}</span>}
+        {notice && <span className={styles.notice}>{notice}</span>}
+        <span role="status" aria-live="polite" className={styles.srOnly}>
+          {error || notice}
+        </span>
       </div>
 
       <section className={styles.grid}>
         <article className={`${styles.card} panel`}>
           <div className={styles.cardHead}>
             <h3>Plain Text</h3>
-            <button className="btn btnSecondary" onClick={() => copyValue(plainText)}><Clipboard size={15} />Copy</button>
+            <button className="btn btnSecondary" onClick={() => copyValue(plainText, "Plain text")}><Clipboard size={15} />Copy</button>
           </div>
           <textarea className={styles.textarea} value={plainText} onChange={(event) => setPlainText(event.target.value)} placeholder="Type plain text..." spellCheck={false} />
         </article>
@@ -97,7 +158,7 @@ export default function Base64Tool() {
         <article className={`${styles.card} panel`}>
           <div className={styles.cardHead}>
             <h3>Base64</h3>
-            <button className="btn btnSecondary" onClick={() => copyValue(base64Text)}><Clipboard size={15} />Copy</button>
+            <button className="btn btnSecondary" onClick={() => copyValue(base64Text, "Base64 text")}><Clipboard size={15} />Copy</button>
           </div>
           <textarea className={styles.textarea} value={base64Text} onChange={(event) => setBase64Text(event.target.value)} placeholder="Base64 output/input..." spellCheck={false} />
         </article>

@@ -40,6 +40,7 @@ export default function QrCodeToolPage() {
   const [size, setSize] = useState<(typeof sizeOptions)[number]>(320);
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [generatedUrl, setGeneratedUrl] = useState("");
+  const [generatedSize, setGeneratedSize] = useState<(typeof sizeOptions)[number] | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -98,6 +99,7 @@ export default function QrCodeToolPage() {
 
       setQrDataUrl(dataUrl);
       setGeneratedUrl(normalizedUrl);
+      setGeneratedSize(size);
       setError("");
       setNotice("QR code generated");
     } catch (generationError) {
@@ -129,7 +131,9 @@ export default function QrCodeToolPage() {
       return;
     }
 
-    const suggestedName = generatedHost ? `${generatedHost}-qr-${size}.png` : `qr-code-${size}.png`;
+    const suggestedName = generatedHost
+      ? `${generatedHost}-qr-${generatedSize}.png`
+      : `qr-code-${generatedSize}.png`;
     const anchor = document.createElement("a");
     anchor.href = qrDataUrl;
     anchor.download = suggestedName;
@@ -141,6 +145,7 @@ export default function QrCodeToolPage() {
     setUrlInput("");
     setQrDataUrl("");
     setGeneratedUrl("");
+    setGeneratedSize(null);
     setError("");
     setNotice("");
   };
@@ -212,8 +217,11 @@ export default function QrCodeToolPage() {
       </header>
 
       <div className="toolMetaRow">
-        <span className="statusChip">Output size: {size}px</span>
+        <span className="statusChip">Selected size: {size}px</span>
         {generatedHost && <span className="statusChip">Domain: {generatedHost}</span>}
+        {qrDataUrl && generatedSize !== null && generatedSize !== size && (
+          <span className={styles.notice}>Size changed — regenerate to update the {generatedSize}px preview</span>
+        )}
         {notice && <span className={styles.notice}>{notice}</span>}
         {error && <span className={styles.error}>{error}</span>}
       </div>
@@ -248,8 +256,8 @@ export default function QrCodeToolPage() {
               <Image
                 src={qrDataUrl}
                 alt={generatedUrl ? `QR code for ${generatedUrl}` : "Generated QR code"}
-                width={size}
-                height={size}
+                width={generatedSize ?? size}
+                height={generatedSize ?? size}
                 className={styles.qrImage}
                 unoptimized
               />

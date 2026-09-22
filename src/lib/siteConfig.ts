@@ -94,7 +94,7 @@ export const siteRoutes: SiteRoute[] = [
   },
   {
     path: "/json-yaml",
-    name: "JSON to YML",
+    name: "JSON to YAML",
     description: "Convert JSON to YAML in-browser.",
     changeFrequency: "weekly",
     priority: 0.8,
@@ -163,8 +163,6 @@ export const siteRoutes: SiteRoute[] = [
     priority: 0.8,
   },
 ];
-
-export const toolRoutes = siteRoutes.filter((route) => route.path !== "/");
 
 export function toAbsoluteUrl(path: string): string {
   return new URL(path, siteUrl).toString();

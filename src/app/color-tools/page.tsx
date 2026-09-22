@@ -238,9 +238,12 @@ export default function ColorToolsPage() {
   const { containerRef, isFullscreen, fullscreenSupported, toggleFullscreen } =
     useToolFullscreen<HTMLDivElement>();
 
-  const [theme, setTheme] = useState<Theme>(() => readLocalTheme());
+  // Initial state intentionally matches what the server renders (hardcoded defaults, not
+  // localStorage) so hydration never mismatches. Saved values are restored once, after mount,
+  // in the effect below.
+  const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
   const [drafts, setDrafts] = useState<Theme>(theme);
-  const [format, setFormat] = useState<ColorFormat>(() => readLocalFormat());
+  const [format, setFormat] = useState<ColorFormat>("hex");
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
@@ -255,6 +258,13 @@ export default function ColorToolsPage() {
     const timeoutId = window.setTimeout(() => setNotice(""), 1600);
     return () => window.clearTimeout(timeoutId);
   }, [notice]);
+
+  // Runs once after mount to restore anything saved from a previous visit - see the comment on
+  // the initial state above for why this can't happen during the initial render instead.
+  useEffect(() => {
+    setTheme(readLocalTheme());
+    setFormat(readLocalFormat());
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem(THEME_KEY, JSON.stringify(theme));

@@ -86,16 +86,24 @@ export default function TimeConverterPage() {
   const { containerRef, isFullscreen, fullscreenSupported, toggleFullscreen } =
     useToolFullscreen<HTMLDivElement>();
 
-  const [epochInput, setEpochInput] = useState(() => readLocalString(EPOCH_KEY, DEFAULT_EPOCH));
-  const [epochUnit, setEpochUnit] = useState<EpochUnit>(() => {
-    const stored = readLocalString(UNIT_KEY, "auto");
-    return stored === "s" || stored === "ms" ? stored : "auto";
-  });
-  const [isoInput, setIsoInput] = useState(() => readLocalString(ISO_KEY, DEFAULT_ISO));
-  const [nowMs, setNowMs] = useState(() => Date.now());
+  // Initial state below intentionally matches what the server renders (hardcoded defaults, not
+  // localStorage or Date.now()) so hydration never mismatches. Real values are set once, after
+  // mount, in the effects below.
+  const [epochInput, setEpochInput] = useState(DEFAULT_EPOCH);
+  const [epochUnit, setEpochUnit] = useState<EpochUnit>("auto");
+  const [isoInput, setIsoInput] = useState(DEFAULT_ISO);
+  const [nowMs, setNowMs] = useState(0);
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
+    setEpochInput(readLocalString(EPOCH_KEY, DEFAULT_EPOCH));
+    const storedUnit = readLocalString(UNIT_KEY, "auto");
+    setEpochUnit(storedUnit === "s" || storedUnit === "ms" ? storedUnit : "auto");
+    setIsoInput(readLocalString(ISO_KEY, DEFAULT_ISO));
+  }, []);
+
+  useEffect(() => {
+    setNowMs(Date.now());
     const intervalId = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(intervalId);
   }, []);

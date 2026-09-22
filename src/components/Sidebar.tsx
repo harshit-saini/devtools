@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
@@ -53,7 +53,7 @@ const navItems: NavItem[] = [
   { name: "Diff Tool", href: "/diff", group: "Analyze", icon: FileDiff },
   { name: "CSV Viewer", href: "/csv", group: "Analyze", icon: Table2 },
   { name: "Base64 Encoder/Decoder", href: "/base64", group: "Analyze", icon: Binary },
-  { name: "JSON to YML", href: "/json-yaml", group: "Analyze", icon: ArrowRightLeft },
+  { name: "JSON to YAML", href: "/json-yaml", group: "Analyze", icon: ArrowRightLeft },
   { name: "HTTP Header Inspector", href: "/http-headers", group: "Analyze", icon: Network },
   { name: "UUID Generator", href: "/uuid-generator", group: "Analyze", icon: Fingerprint },
   { name: "Time Converter", href: "/time-converter", group: "Analyze", icon: Clock3 },
@@ -71,17 +71,15 @@ export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [query, setQuery] = useState("");
 
-  useEffect(() => {
+  // useLayoutEffect (not useEffect) so the collapsed state is restored before the browser paints,
+  // avoiding a visible flash of the expanded sidebar on every load when it was left collapsed.
+  useLayoutEffect(() => {
     const storedValue = window.localStorage.getItem(SIDEBAR_KEY);
     if (storedValue === null) {
       return;
     }
 
-    const timeoutId = window.setTimeout(() => {
-      setIsCollapsed(storedValue === "true");
-    }, 0);
-
-    return () => window.clearTimeout(timeoutId);
+    setIsCollapsed(storedValue === "true");
   }, []);
 
   const groupedItems = useMemo(() => {

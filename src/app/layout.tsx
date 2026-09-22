@@ -82,7 +82,7 @@ export const metadata: Metadata = {
     locale: "en_US",
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: websiteTitle,
     description: siteDescription,
   },
@@ -98,10 +98,15 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
+        <a href="#main-content" className={layoutStyles.skipLink}>
+          Skip to content
+        </a>
         <div className={layoutStyles.backgroundAura} aria-hidden="true" />
         <div className={layoutStyles.appContainer}>
           <Sidebar />
-          <main className={layoutStyles.mainContent}>{children}</main>
+          <main id="main-content" className={layoutStyles.mainContent}>
+            {children}
+          </main>
         </div>
       </body>
     </html>
