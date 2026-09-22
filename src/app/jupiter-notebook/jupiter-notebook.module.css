@@ -15,3 +15,5 @@
   background: rgba(12, 20, 34, 0.65); color: #bae6fd; padding: 0.75rem; font-size: 0.85rem; overflow: auto;
 }
 .error { border-color: rgba(248, 113, 113, 0.35); color: #fecaca; }
+.runningNote { margin: 0; color: var(--text-muted); font-size: 0.84rem; }
+
