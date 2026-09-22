@@ -106,13 +106,19 @@ export function readRoomHash(hash: string): string | null {
   }
 
   const raw = normalized.slice(ROOM_HASH_PREFIX.length);
-  let decoded = raw;
+  let decoded: string;
   try {
     decoded = decodeURIComponent(raw);
   } catch {
-    // decodeURIComponent throws URIError on a malformed escape such as "#room=%zz". The fragment
+    // decodeURIComponent throws URIError on a malformed escape such as "#room=abc%". The fragment
     // comes straight from the address bar, so anyone can put one there - and this is read during
     // render, where an exception would take down the whole tool rather than just the room code.
+    //
+    // Rejected rather than salvaged from the raw text: normalization would strip the stray "%"
+    // and hand back "abc", quietly joining a *different* room than the link named. For a tool
+    // where the code is the only thing keeping others out, "this link is unusable" is the safer
+    // answer than "here is a room that is probably not the one you were sent".
+    return null;
   }
 
   return normalizeRoomCode(decoded);

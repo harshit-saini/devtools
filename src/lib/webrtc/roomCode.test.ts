@@ -173,8 +173,11 @@ describe("readRoomHash resilience", () => {
     expect(readRoomHash("#room=swift%2Dotter%2D481920")).toBe("swift-otter-481920");
   });
 
-  it("recovers a bare code from an unparseable percent escape", () => {
-    // "%zz" is dropped by normalization rather than aborting the whole read.
-    expect(readRoomHash("#room=swift-otter-481920%zz")).toBe("swift-otter-481920zz");
+  it("rejects a code it cannot decode rather than salvaging a different one", () => {
+    // Stripping the stray "%" would yield a valid-looking code that is not the one the link
+    // named, so the reader would silently join the wrong room.
+    expect(readRoomHash("#room=abc%")).toBeNull();
+    expect(readRoomHash("#room=swift-otter-481920%zz")).toBeNull();
+    expect(extractRoomCode("https://x.example/meet#room=abc%")).toBeNull();
   });
 });
