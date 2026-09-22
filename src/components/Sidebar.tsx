@@ -1,9 +1,10 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
+import { useLocalStorageState } from "@/lib/useLocalStorageState";
 import {
   Palette,
   Network,
@@ -68,19 +69,11 @@ const SIDEBAR_KEY = "devtools.sidebar.collapsed";
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  // useLocalStorageState resyncs the collapsed state via useSyncExternalStore's own pre-paint
+  // consistency check, avoiding both a hydration mismatch and the flash of the expanded sidebar
+  // that a plain useEffect restore would cause.
+  const [isCollapsed, setIsCollapsed] = useLocalStorageState(SIDEBAR_KEY, false, (raw) => raw === "true");
   const [query, setQuery] = useState("");
-
-  // useLayoutEffect (not useEffect) so the collapsed state is restored before the browser paints,
-  // avoiding a visible flash of the expanded sidebar on every load when it was left collapsed.
-  useLayoutEffect(() => {
-    const storedValue = window.localStorage.getItem(SIDEBAR_KEY);
-    if (storedValue === null) {
-      return;
-    }
-
-    setIsCollapsed(storedValue === "true");
-  }, []);
 
   const groupedItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
