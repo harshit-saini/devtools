@@ -67,6 +67,8 @@ type PeerEntry = {
   control: RTCDataChannel;
   bulk: RTCDataChannel;
   polite: boolean;
+  /** True on the side that owns the first offer, i.e. the peer that joined the room later. */
+  initiator: boolean;
   makingOffer: boolean;
   ignoreOffer: boolean;
   isSettingRemoteAnswerPending: boolean;
@@ -150,6 +152,7 @@ export class PeerMesh {
       }),
       // The two sides compare ids and therefore always reach opposite conclusions.
       polite: this.options.selfId < peer.id,
+      initiator: initiate,
       makingOffer: false,
       ignoreOffer: false,
       isSettingRemoteAnswerPending: false,
@@ -222,9 +225,13 @@ export class PeerMesh {
   }
 
   /**
-   * Publishes `stream` (or stops publishing when null) to every peer. Tracks are attached with
-   * `replaceTrack` on an existing sender where possible, because that swaps the media without a
-   * new offer/answer round.
+   * Publishes `stream` (or stops publishing when null) to every peer.
+   *
+   * This is the single path for every media change - starting a camera, muting it, swapping in a
+   * screen share. Once a sender exists for a kind, its track is swapped with `replaceTrack`, which
+   * needs no new offer/answer round, so a screen share takes over mid-call without interrupting
+   * anything. Routing every change through one method also keeps all outgoing tracks announced
+   * under the same stream, which is what lets the far side keep them together in one tile.
    */
   async setLocalStream(stream: MediaStream | null): Promise<void> {
     this.localStream = stream;
@@ -237,17 +244,6 @@ export class PeerMesh {
         await this.setSenderTrack(entry, "video", videoTrack);
         await this.setSenderTrack(entry, "audio", audioTrack);
       }),
-    );
-  }
-
-  /**
-   * Swaps just the outgoing video track - used when screen sharing starts or stops. Using
-   * `replaceTrack` keeps the existing transceiver, so the remote video element keeps playing and
-   * no renegotiation is needed.
-   */
-  async replaceOutgoingVideo(track: MediaStreamTrack | null): Promise<void> {
-    await Promise.all(
-      [...this.peers.values()].map((entry) => this.setSenderTrack(entry, "video", track)),
     );
   }
 
@@ -365,6 +361,12 @@ export class PeerMesh {
     const { connection } = entry;
 
     connection.onnegotiationneeded = () => {
+      // Creating the two data channels needs an SCTP transport, so this fires once on each side
+      // as soon as the connection is built. Only the designated initiator may act on that: if
+      // both sides offered here, every connection would open with an avoidable collision.
+      if (!entry.initiator && !connection.remoteDescription) {
+        return;
+      }
       void this.negotiate(entry);
     };
 
@@ -387,15 +389,36 @@ export class PeerMesh {
     };
 
     connection.ontrack = (event) => {
-      // The stream identity is stable for the life of the transceiver, so assigning it once is
-      // enough; later tracks (e.g. a screen share replacing a camera) arrive on the same stream.
-      const [stream] = event.streams;
-      const next = stream ?? new MediaStream([event.track]);
-
-      if (entry.stream !== next) {
-        entry.stream = next;
-        this.publish();
+      // One stable MediaStream per peer, accumulated rather than replaced.
+      //
+      // A peer's camera and microphone are added at different moments, so they can be announced
+      // as two different streams; taking `event.streams[0]` each time would leave the tile holding
+      // whichever track arrived last - audio only, with a blank video. Mutating one stream we own
+      // also means the bound <video> element picks up a later track without React re-rendering,
+      // which is why the identity must stay the same.
+      if (!entry.stream) {
+        entry.stream = new MediaStream();
       }
+      const stream = entry.stream;
+
+      // A new track of a kind we already have replaces it: that is a screen share taking over
+      // from a camera.
+      for (const existing of stream.getTracks()) {
+        if (existing.kind === event.track.kind && existing.id !== event.track.id) {
+          stream.removeTrack(existing);
+        }
+      }
+
+      if (!stream.getTrackById(event.track.id)) {
+        stream.addTrack(event.track);
+      }
+
+      event.track.onended = () => {
+        stream.removeTrack(event.track);
+        this.publish();
+      };
+
+      this.publish();
     };
 
     connection.onconnectionstatechange = () => {
@@ -450,6 +473,14 @@ export class PeerMesh {
   /** The offer half of perfect negotiation. */
   private async negotiate(entry: PeerEntry): Promise<void> {
     if (this.closed || entry.connection.signalingState === "closed") {
+      return;
+    }
+
+    // A negotiation already in flight will carry whatever changed, so starting a second one only
+    // produces a redundant offer and an extra ICE gathering round. This is what collapses the
+    // explicit first offer and the `negotiationneeded` that data channel creation triggers into
+    // one. Anything still pending re-fires `negotiationneeded` once the state returns to stable.
+    if (entry.makingOffer || entry.connection.signalingState !== "stable") {
       return;
     }
 

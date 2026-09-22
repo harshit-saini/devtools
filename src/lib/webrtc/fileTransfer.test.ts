@@ -21,6 +21,11 @@ function bytes(length: number, seed = 0): Uint8Array {
   return data;
 }
 
+/** Blob's parameter type does not accept a Uint8Array whose buffer is only ArrayBufferLike. */
+function blobOf(...parts: Uint8Array[]): Blob {
+  return new Blob(parts as BlobPart[]);
+}
+
 describe("chunk framing", () => {
   it("round-trips a transfer id, chunk index, and payload", () => {
     const payload = bytes(1000, 7);
@@ -98,8 +103,8 @@ describe("chunk maths", () => {
 describe("integrity digest", () => {
   it("matches when sender and receiver chunk the same bytes", async () => {
     const payload = bytes(CHUNK_PAYLOAD_BYTES * 2 + 500, 3);
-    const sent = await computeFileDigest(new Blob([payload]));
-    const received = await computeFileDigest(new Blob([payload]));
+    const sent = await computeFileDigest(blobOf(payload));
+    const received = await computeFileDigest(blobOf(payload));
 
     expect(sent).toMatch(/^[0-9a-f]{64}$/);
     expect(received).toBe(sent);
@@ -110,8 +115,8 @@ describe("integrity digest", () => {
     const tampered = Uint8Array.from(original);
     tampered[CHUNK_PAYLOAD_BYTES + 3] ^= 0x01;
 
-    const before = await computeFileDigest(new Blob([original]));
-    const after = await computeFileDigest(new Blob([tampered]));
+    const before = await computeFileDigest(blobOf(original));
+    const after = await computeFileDigest(blobOf(tampered));
 
     expect(after).not.toBe(before);
   });
@@ -120,8 +125,8 @@ describe("integrity digest", () => {
     const first = bytes(CHUNK_PAYLOAD_BYTES, 1);
     const second = bytes(CHUNK_PAYLOAD_BYTES, 2);
 
-    const inOrder = await computeFileDigest(new Blob([first, second]));
-    const swapped = await computeFileDigest(new Blob([second, first]));
+    const inOrder = await computeFileDigest(blobOf(first, second));
+    const swapped = await computeFileDigest(blobOf(second, first));
 
     expect(swapped).not.toBe(inOrder);
   });
@@ -130,8 +135,8 @@ describe("integrity digest", () => {
     const full = bytes(CHUNK_PAYLOAD_BYTES * 2, 9);
     const short = full.slice(0, CHUNK_PAYLOAD_BYTES);
 
-    expect(await computeFileDigest(new Blob([short]))).not.toBe(
-      await computeFileDigest(new Blob([full])),
+    expect(await computeFileDigest(blobOf(short))).not.toBe(
+      await computeFileDigest(blobOf(full)),
     );
   });
 
@@ -142,7 +147,7 @@ describe("integrity digest", () => {
   it("reports hashing progress up to the file size", async () => {
     const payload = bytes(CHUNK_PAYLOAD_BYTES * 2 + 1, 4);
     const seen: number[] = [];
-    await computeFileDigest(new Blob([payload]), (hashed) => seen.push(hashed));
+    await computeFileDigest(blobOf(payload), (hashed) => seen.push(hashed));
 
     expect(seen).toHaveLength(3);
     expect(seen[seen.length - 1]).toBe(payload.byteLength);

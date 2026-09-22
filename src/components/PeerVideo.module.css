@@ -1,0 +1,107 @@
+.tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(20, 36, 50, 0.12);
+  background: #0f1720;
+  overflow: hidden;
+}
+
+.video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #0f1720;
+}
+
+.videoHidden {
+  visibility: hidden;
+}
+
+/* A local preview reads as a mirror, the way people expect to see themselves. */
+.mirrored {
+  transform: scaleX(-1);
+}
+
+.placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 62px;
+  height: 62px;
+  border-radius: 22px;
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+.gesture {
+  position: absolute;
+  inset: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text-main);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.footer {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.label {
+  max-width: 100%;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(15, 23, 32, 0.72);
+  color: #f4f8f8;
+  font-size: 0.76rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(234, 88, 12, 0.92);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.mutedIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(190, 18, 60, 0.9);
+  color: #fff;
+}

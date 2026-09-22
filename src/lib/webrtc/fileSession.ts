@@ -22,7 +22,7 @@ import {
   type TransferProgress,
 } from "./fileTransfer";
 import { sanitizeFileName } from "./protocol";
-import type { FileOffer } from "./protocol";
+import type { ControlMessage, FileOffer } from "./protocol";
 
 export type TransferDirection = "outgoing" | "incoming";
 
@@ -55,10 +55,16 @@ export type Transfer = {
 /** How often progress is pushed to the UI; 10 Hz is smooth without causing a render storm. */
 const PROGRESS_INTERVAL_MS = 100;
 
+/**
+ * Everything this session needs from the network. `PeerMesh` satisfies it structurally, so the
+ * mesh can be handed over directly once a room is joined - and until then the session simply has
+ * no transport and every send reports failure.
+ */
 export interface TransferTransport {
   sendBulk(peerId: string, frame: ArrayBuffer): boolean;
   bulkBufferedAmount(peerId: string): number;
   isPeerReady(peerId: string): boolean;
+  sendControl(peerId: string, message: ControlMessage): boolean;
 }
 
 type OutgoingTransfer = {
@@ -81,11 +87,6 @@ type IncomingTransfer = {
 
 export type FileSessionCallbacks = {
   onTransferChanged(transfer: Transfer): void;
-  sendOffer(peerId: string, offer: FileOffer): void;
-  sendAccept(peerId: string, transferId: number): void;
-  sendDecline(peerId: string, transferId: number): void;
-  sendCancel(peerId: string, transferId: number): void;
-  sendComplete(peerId: string, transferId: number): void;
 };
 
 export function transferKey(direction: TransferDirection, peerId: string, transferId: number): string {
@@ -98,15 +99,29 @@ export class FileSession {
   private readonly incoming = new Map<string, IncomingTransfer>();
   private nextTransferId = 1;
   private closed = false;
+  private transport: TransferTransport | null = null;
 
   constructor(
-    private readonly transport: TransferTransport,
     private readonly callbacks: FileSessionCallbacks,
     private readonly now: () => number = () => Date.now(),
   ) {}
 
+  /** Points the session at the current mesh, or at nothing once a room is left. */
+  setTransport(transport: TransferTransport | null): void {
+    this.transport = transport;
+  }
+
   list(): Transfer[] {
     return [...this.transfers.values()];
+  }
+
+  /**
+   * Re-arms a session that has been closed. React's strict mode mounts every effect twice, so a
+   * session created once per component is closed and then reused; without this it would come back
+   * permanently inert.
+   */
+  open(): void {
+    this.closed = false;
   }
 
   /**
@@ -114,7 +129,7 @@ export class FileSession {
    * travel with it and the receiver can verify what it got against what was promised.
    */
   async offerFile(peerId: string, file: File): Promise<void> {
-    if (file.size > MAX_TRANSFER_BYTES) {
+    if (this.closed || file.size > MAX_TRANSFER_BYTES) {
       return;
     }
 
@@ -150,19 +165,22 @@ export class FileSession {
     transfer.status = "offered";
     this.emit(transfer);
 
-    this.callbacks.sendOffer(peerId, {
-      transferId,
-      name: transfer.name,
-      size: transfer.size,
-      mime: transfer.mime,
-      digest,
+    this.sendControl(peerId, {
+      type: "file-offer",
+      offer: {
+        transferId,
+        name: transfer.name,
+        size: transfer.size,
+        mime: transfer.mime,
+        digest,
+      },
     });
   }
 
   /** Records an offer from a peer. Nothing is transferred until the user accepts. */
   receiveOffer(peerId: string, offer: FileOffer): void {
     if (offer.size > MAX_TRANSFER_BYTES) {
-      this.callbacks.sendDecline(peerId, offer.transferId);
+      this.sendControl(peerId, { type: "file-decline", transferId: offer.transferId });
       return;
     }
 
@@ -204,7 +222,7 @@ export class FileSession {
     transfer.status = "transferring";
     transfer.progress = computeProgress(0, transfer.size, 0);
     this.emit(transfer);
-    this.callbacks.sendAccept(peerId, transferId);
+    this.sendControl(peerId, { type: "file-accept", transferId });
   }
 
   declineOffer(peerId: string, transferId: number): void {
@@ -217,7 +235,7 @@ export class FileSession {
     this.incoming.delete(key);
     transfer.status = "declined";
     this.emit(transfer);
-    this.callbacks.sendDecline(peerId, transferId);
+    this.sendControl(peerId, { type: "file-decline", transferId });
   }
 
   /** The remote side accepted our offer; start pushing chunks. */
@@ -287,7 +305,7 @@ export class FileSession {
     this.incoming.delete(key);
     transfer.status = "cancelled";
     this.emit(transfer);
-    this.callbacks.sendCancel(peerId, transferId);
+    this.sendControl(peerId, { type: "file-cancel", transferId });
   }
 
   /**
@@ -440,7 +458,7 @@ export class FileSession {
       }
 
       const frame = encodeChunk(transfer.transferId, index, new Uint8Array(payload));
-      if (!this.transport.sendBulk(transfer.peerId, frame)) {
+      if (!this.transport?.sendBulk(transfer.peerId, frame)) {
         this.fail(transfer, "The connection closed mid-transfer");
         return;
       }
@@ -451,7 +469,8 @@ export class FileSession {
       if (elapsed - lastEmit >= PROGRESS_INTERVAL_MS || index === total - 1) {
         lastEmit = elapsed;
         // Progress is what has actually left the buffer, not what has been queued into it.
-        const sent = Math.max(0, bytesQueued - this.transport.bulkBufferedAmount(transfer.peerId));
+        const buffered = this.transport?.bulkBufferedAmount(transfer.peerId) ?? 0;
+        const sent = Math.max(0, bytesQueued - buffered);
         transfer.progress = computeProgress(sent, transfer.size, elapsed);
         this.emit(transfer);
       }
@@ -468,7 +487,7 @@ export class FileSession {
    * arrive, and the UI would show it as in-progress forever.
    */
   private waitForDrain(peerId: string, state: OutgoingTransfer): Promise<void> {
-    if (!this.transport.isPeerReady(peerId)) {
+    if (!this.transport?.isPeerReady(peerId)) {
       return Promise.reject(new Error("The connection closed mid-transfer"));
     }
 
@@ -516,7 +535,7 @@ export class FileSession {
     transfer.progress = computeProgress(transfer.size, transfer.size, 0);
     this.emit(transfer);
 
-    this.callbacks.sendComplete(peerId, transfer.transferId);
+    this.sendControl(peerId, { type: "file-complete", transferId: transfer.transferId });
   }
 
   private createTransfer(init: Omit<Transfer, "progress" | "blobUrl" | "error">): Transfer {
@@ -552,6 +571,10 @@ export class FileSession {
     transfer.status = "failed";
     transfer.error = message;
     this.emit(transfer);
+  }
+
+  private sendControl(peerId: string, message: ControlMessage): boolean {
+    return this.transport?.sendControl(peerId, message) ?? false;
   }
 
   private emit(transfer: Transfer): void {

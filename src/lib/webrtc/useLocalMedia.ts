@@ -79,8 +79,11 @@ export function describeMediaError(error: unknown): MediaError {
 }
 
 export type UseLocalMediaOptions = {
-  /** Called whenever the track that should be sent to peers changes. */
-  onVideoTrackChanged?(track: MediaStreamTrack | null): void;
+  /**
+   * Called whenever the set of tracks to publish changes. Every path below mutates the local
+   * stream and then reports it here, so a single consumer (PeerMesh.setLocalStream) handles
+   * starting, muting, and screen-share swaps alike.
+   */
   onStreamChanged?(stream: MediaStream | null): void;
 };
 
@@ -102,19 +105,28 @@ export function useLocalMedia(options: UseLocalMediaOptions = {}) {
   const cameraTrackRef = useRef<MediaStreamTrack | null>(null);
 
   const publishStream = useCallback((next: MediaStream | null) => {
-    streamRef.current = next;
-    setStream(next);
-    optionsRef.current.onStreamChanged?.(next);
+    // An empty stream is reported as no stream at all: it is the difference between "this person
+    // has media open but muted" and "this person has nothing running", which is what the UI uses
+    // to decide whether to show call controls or an invitation to start.
+    const resolved = next && next.getTracks().length > 0 ? next : null;
+    streamRef.current = resolved;
+    setStream(resolved);
+    optionsRef.current.onStreamChanged?.(resolved);
   }, []);
 
+  /**
+   * The stream tracks are collected into before being published. Deliberately not routed through
+   * publishStream: it is empty at this point, and publishing an empty stream would report "no
+   * media" to the rest of the app a moment before the tracks are attached.
+   */
   const ensureStream = useCallback((): MediaStream => {
     if (streamRef.current) {
       return streamRef.current;
     }
     const created = new MediaStream();
-    publishStream(created);
+    streamRef.current = created;
     return created;
-  }, [publishStream]);
+  }, []);
 
   /** Everything that must happen to fully release a device. */
   const stopTrack = useCallback((track: MediaStreamTrack | null) => {
@@ -150,11 +162,10 @@ export function useLocalMedia(options: UseLocalMediaOptions = {}) {
           if (track.kind === "video") {
             stopTrack(cameraTrackRef.current);
             cameraTrackRef.current = track;
-            // While a screen share is up it owns the outgoing video track, so a camera acquired
-            // now is held locally until the share stops.
+            // While a screen share is up it owns the outgoing video slot, so a camera acquired
+            // now is held back until the share stops.
             if (!screenTrackRef.current) {
               target.addTrack(track);
-              optionsRef.current.onVideoTrackChanged?.(track);
             }
             setCameraOn(true);
           } else {
@@ -187,10 +198,6 @@ export function useLocalMedia(options: UseLocalMediaOptions = {}) {
     stopTrack(cameraTrackRef.current);
     cameraTrackRef.current = null;
     setCameraOn(false);
-
-    if (!screenTrackRef.current) {
-      optionsRef.current.onVideoTrackChanged?.(null);
-    }
     publishStream(streamRef.current ? new MediaStream(streamRef.current.getTracks()) : null);
   }, [cameraOn, publishStream, start, stopTrack]);
 
@@ -222,11 +229,9 @@ export function useLocalMedia(options: UseLocalMediaOptions = {}) {
     const camera = cameraTrackRef.current;
     if (camera && camera.readyState === "live") {
       streamRef.current?.addTrack(camera);
-      optionsRef.current.onVideoTrackChanged?.(camera);
     } else {
       cameraTrackRef.current = null;
       setCameraOn(false);
-      optionsRef.current.onVideoTrackChanged?.(null);
     }
 
     publishStream(streamRef.current ? new MediaStream(streamRef.current.getTracks()) : null);
@@ -264,7 +269,6 @@ export function useLocalMedia(options: UseLocalMediaOptions = {}) {
       target.addTrack(screenTrack);
       setScreenOn(true);
       setError(null);
-      optionsRef.current.onVideoTrackChanged?.(screenTrack);
       publishStream(new MediaStream(target.getTracks()));
 
       // The browser's own "Stop sharing" bar bypasses our UI entirely, so the only reliable way to
@@ -304,7 +308,6 @@ export function useLocalMedia(options: UseLocalMediaOptions = {}) {
     setCameraOn(false);
     setMicrophoneOn(false);
     setScreenOn(false);
-    optionsRef.current.onVideoTrackChanged?.(null);
   }, [publishStream, stopTrack]);
 
   // Releasing devices on unmount is not optional: a navigation away with the camera still open
