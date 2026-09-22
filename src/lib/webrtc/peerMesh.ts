@@ -29,6 +29,7 @@ import {
 } from "./protocol";
 import { decodeChunk, MAX_TRANSFER_BYTES, SEND_LOW_WATER_MARK, type ChunkFrame } from "./fileTransfer";
 import { colorForPeer } from "./roomCode";
+import { MAX_CANDIDATES_PER_BATCH } from "./signaling";
 import type { RoomPeer, SignalPayload } from "./signaling";
 
 export type PeerLinkState = "connecting" | "connected" | "reconnecting" | "failed" | "closed";
@@ -44,6 +45,12 @@ export type MeshPeerView = {
   readonly stream: MediaStream | null;
   /** Populated once ICE has picked a route; "relay" means traffic goes through a TURN server. */
   readonly candidateType: string | null;
+  /**
+   * Increments whenever this peer's track set changes. The stream object is kept stable so the
+   * bound <video> keeps playing, which means React cannot see a track swap; this gives it
+   * something that does change.
+   */
+  readonly trackEpoch: number;
 };
 
 export type MeshSnapshot = {
@@ -73,13 +80,14 @@ type PeerEntry = {
   ignoreOffer: boolean;
   isSettingRemoteAnswerPending: boolean;
   /** Candidates that arrived before a remote description existed to attach them to. */
-  pendingCandidates: RTCIceCandidateInit[];
+  pendingCandidates: (RTCIceCandidateInit | null)[];
   /** Serializes relayed payloads for this peer; see handleSignal. */
   signalQueue: Promise<void>;
   /** Locally gathered candidates waiting to be relayed as one batch. */
   outgoingCandidates: (RTCIceCandidateInit | null)[];
   candidateFlushTimer: number | null;
   stream: MediaStream | null;
+  trackEpoch: number;
   state: PeerLinkState;
   candidateType: string | null;
   videoSender: RTCRtpSender | null;
@@ -163,6 +171,7 @@ export class PeerMesh {
       outgoingCandidates: [],
       candidateFlushTimer: null,
       stream: null,
+      trackEpoch: 0,
       state: "connecting",
       candidateType: null,
       videoSender: null,
@@ -237,7 +246,13 @@ export class PeerMesh {
       }
 
       for (const candidate of payload.candidates) {
-        await this.handleCandidate(entry, candidate);
+        // Isolated per candidate: a stale one from a superseded negotiation round rejects, and
+        // aborting the loop there would throw away the candidates behind it.
+        try {
+          await this.handleCandidate(entry, candidate);
+        } catch {
+          // Already handled inside handleCandidate for the cases worth knowing about.
+        }
       }
     } catch {
       // A rejected description or candidate means this negotiation round failed; ICE restart or
@@ -321,12 +336,21 @@ export class PeerMesh {
 
   close(): void {
     this.closed = true;
+
+    const removed = [...this.peers.keys()];
     for (const entry of this.peers.values()) {
       this.teardown(entry);
     }
     this.peers.clear();
     this.localStream = null;
     this.publish();
+
+    // Reported before the listeners go: a file transfer parked on backpressure is only unparked
+    // by this callback, so skipping it leaves the transfer showing progress forever.
+    for (const peerId of removed) {
+      this.options.callbacks.onPeerRemoved(peerId);
+    }
+
     this.listeners.clear();
   }
 
@@ -437,9 +461,11 @@ export class PeerMesh {
 
       event.track.onended = () => {
         stream.removeTrack(event.track);
+        entry.trackEpoch += 1;
         this.publish();
       };
 
+      entry.trackEpoch += 1;
       this.publish();
     };
 
@@ -569,11 +595,11 @@ export class PeerMesh {
     candidate: RTCIceCandidateInit | null,
   ): Promise<void> {
     // Candidates routinely arrive before the description that gives them a media section to attach
-    // to, so they are queued rather than dropped.
+    // to, so they are queued rather than dropped. The null end-of-candidates marker is queued
+    // too: dropping it leaves the connection waiting for candidates that will never come, which
+    // delays the "no route exists" conclusion on a connection that is going to fail anyway.
     if (!entry.connection.remoteDescription) {
-      if (candidate) {
-        entry.pendingCandidates.push(candidate);
-      }
+      entry.pendingCandidates.push(candidate);
       return;
     }
 
@@ -596,8 +622,13 @@ export class PeerMesh {
     const candidates = entry.outgoingCandidates;
     entry.outgoingCandidates = [];
 
-    if (candidates.length > 0) {
-      this.options.callbacks.sendSignal(entry.id, { kind: "candidates", candidates });
+    // Split at the limit the receiving validator enforces. A single oversized batch would be
+    // rejected in full, losing every candidate in it.
+    for (let index = 0; index < candidates.length; index += MAX_CANDIDATES_PER_BATCH) {
+      this.options.callbacks.sendSignal(entry.id, {
+        kind: "candidates",
+        candidates: candidates.slice(index, index + MAX_CANDIDATES_PER_BATCH),
+      });
     }
   }
 
@@ -607,7 +638,7 @@ export class PeerMesh {
 
     for (const candidate of queued) {
       try {
-        await entry.connection.addIceCandidate(candidate);
+        await entry.connection.addIceCandidate(candidate ?? undefined);
       } catch {
         // Stale candidate from a superseded negotiation round.
       }
@@ -709,6 +740,7 @@ export class PeerMesh {
         bulkReady: entry.bulk.readyState === "open",
         stream: entry.stream,
         candidateType: entry.candidateType,
+        trackEpoch: entry.trackEpoch,
       })),
     };
 

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Copy, Dices, Link2, LogOut, Users } from "lucide-react";
 import styles from "./PeerRoomBar.module.css";
-import { useIsMountedOnClient, useLocalStorageState } from "@/lib/useLocalStorageState";
+import { useIsMountedOnClient } from "@/lib/useLocalStorageState";
 import { isSecureContextAvailable, isWebRtcSupported, signalingUrl } from "@/lib/webrtc/config";
 import {
   buildShareLink,
@@ -13,6 +13,7 @@ import {
   readRoomHash,
   suggestDisplayName,
 } from "@/lib/webrtc/roomCode";
+import { MAX_NAME_LENGTH } from "@/lib/webrtc/protocol";
 import type { SessionError } from "@/lib/webrtc/peerSession";
 import type { SignalingStatus } from "@/lib/webrtc/signaling";
 
@@ -44,19 +45,36 @@ const STATUS_LABELS: Record<SignalingStatus, string> = {
 };
 
 /**
- * Restores a display name from localStorage, falling back to a generated one so a peer is never
- * listed as a bare id.
+ * Restores a display name from localStorage once, then keeps it as ordinary state.
  *
- * The fallback is generated only once the component is known to be running on the client, because
- * it is random: producing it during the server render (or the hydration render) would guarantee a
- * mismatch between the two.
+ * Deliberately not `useLocalStorageState`: that hook re-seeds from localStorage whenever the
+ * stored value differs from its seed, and the store is only written in an effect. For a text
+ * field that lag is destructive - a render triggered by keystroke N sees the value written for
+ * keystroke N-1, decides the store has changed underneath it, and resets the field, so every
+ * other character typed is discarded. It works for the sidebar's toggle because that writes
+ * localStorage synchronously alongside setState.
+ *
+ * The fallback name is generated only once the component is known to be on the client, because it
+ * is random: producing it during the server render would guarantee a hydration mismatch.
  */
 export function usePersistedDisplayName(): [string, (value: string) => void] {
-  const [stored, setStored] = useLocalStorageState(NAME_KEY, "", (raw) => raw);
   const mounted = useIsMountedOnClient();
-  const suggested = useMemo(() => (mounted ? suggestDisplayName() : ""), [mounted]);
+  const [name, setName] = useState("");
+  const [restored, setRestored] = useState(false);
 
-  return [stored || suggested, setStored];
+  if (mounted && !restored) {
+    setRestored(true);
+    setName(window.localStorage.getItem(NAME_KEY) || suggestDisplayName());
+  }
+
+  useEffect(() => {
+    if (!restored) {
+      return;
+    }
+    window.localStorage.setItem(NAME_KEY, name);
+  }, [restored, name]);
+
+  return [name, setName];
 }
 
 export default function PeerRoomBar({
@@ -179,7 +197,7 @@ export default function PeerRoomBar({
               className="textInput"
               value={displayName}
               onChange={(event) => onDisplayNameChange(event.target.value)}
-              maxLength={48}
+              maxLength={MAX_NAME_LENGTH}
               aria-label="Your display name"
             />
           </label>
@@ -201,7 +219,7 @@ export default function PeerRoomBar({
               value={displayName}
               onChange={(event) => onDisplayNameChange(event.target.value)}
               placeholder="Shown to everyone in the room"
-              maxLength={48}
+              maxLength={MAX_NAME_LENGTH}
             />
           </label>
 

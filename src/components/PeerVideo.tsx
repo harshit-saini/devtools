@@ -14,6 +14,8 @@ type PeerVideoProps = {
   isLocal?: boolean;
   muted?: boolean;
   badge?: string;
+  /** Changes when the peer's track set changes; see below. */
+  trackEpoch?: number;
 };
 
 /**
@@ -33,6 +35,7 @@ export default function PeerVideo({
   isLocal = false,
   muted = false,
   badge,
+  trackEpoch = 0,
 }: PeerVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [needsGesture, setNeedsGesture] = useState(false);
@@ -64,18 +67,17 @@ export default function PeerVideo({
 
     tryPlay();
 
-    // The peer's stream is mutated in place as tracks arrive - a camera some seconds after a
-    // microphone, or a screen share replacing a camera - and the element does not always start
-    // rendering a track added after playback began.
-    stream.addEventListener("addtrack", tryPlay);
-
     return () => {
-      stream.removeEventListener("addtrack", tryPlay);
       // Dropping the reference on unmount lets the browser release the decoder.
       element.pause();
       element.srcObject = null;
     };
-  }, [stream]);
+    // Re-runs on trackEpoch as well as identity: the peer's stream is mutated in place as tracks
+    // arrive - a camera some seconds after a microphone, or a screen share replacing a camera -
+    // and an element that has already started playing does not always pick those up on its own.
+    // The stream object is kept stable on purpose, so its identity cannot signal the change, and
+    // MediaStream's own "addtrack" event does not fire for tracks added programmatically.
+  }, [stream, trackEpoch]);
 
   const handleGesture = () => {
     const attempt = videoRef.current?.play();

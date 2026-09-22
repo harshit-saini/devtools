@@ -86,9 +86,7 @@ export default function FileShare() {
           break;
       }
     },
-    onBulkChunk: (peerId, frame) => {
-      void fileSession.handleChunk(peerId, frame);
-    },
+    onBulkChunk: (peerId, frame) => fileSession.handleChunk(peerId, frame),
     onBulkDrain: (peerId) => fileSession.handleDrain(peerId),
     onPeerRemoved: (peerId) => fileSession.abortPeer(peerId),
   });
@@ -176,6 +174,10 @@ export default function FileShare() {
     anchor.download = transfer.name;
     anchor.click();
     setNotice(`Saved ${transfer.name}`);
+
+    // The download has its own handle on the blob by now, so the object URL can go; keeping it
+    // would pin the whole file in memory until the tab is closed.
+    fileSession.releaseBlob(transfer.key);
   };
 
   const handleLeave = useCallback(() => {

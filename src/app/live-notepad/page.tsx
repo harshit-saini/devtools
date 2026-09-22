@@ -57,8 +57,16 @@ export default function LiveNotepad() {
   // Set while a remote patch is being written into the textarea, so the resulting change event is
   // not mistaken for something the user typed.
   const applyingRemoteRef = useRef(false);
-  // The value the textarea held last time we looked, which is what a change is diffed against.
+  /**
+   * The value the textarea is actually showing, kept in sync from the layout effect below rather
+   * than assigned when a patch is applied. The difference matters: a remote patch calls setText,
+   * but the DOM still holds the old value until React commits. If the user types in that window,
+   * the change event carries the pre-patch text - and diffing it against the post-patch value
+   * reads as "the user deleted the remote peer's characters", which then gets broadcast.
+   */
   const previousValueRef = useRef("");
+  /** The committed text at the moment an IME composition began; see handleCompositionEnd. */
+  const compositionBaseRef = useRef("");
   // Caret anchored to a character rather than an offset, so a remote edit above it does not drag
   // it along; restored in a layout effect after the value is written back.
   const pendingCaretRef = useRef<{ anchor: CaretAnchor; head: CaretAnchor } | null>(null);
@@ -99,24 +107,32 @@ export default function LiveNotepad() {
     }
 
     const element = textareaRef.current;
-    const isFocused = element !== null && document !== null && element === window.document.activeElement;
+    const isFocused = element !== null && element === window.document.activeElement;
 
-    // Anchor before applying: afterwards the character the caret sat next to may have moved.
-    const caret = isFocused
-      ? {
-          anchor: anchorCaret(document, element.selectionStart ?? 0),
-          head: anchorCaret(document, element.selectionEnd ?? 0),
-        }
-      : null;
+    // Anchored before applying, because afterwards the character the caret sat next to may have
+    // moved. An anchor from an earlier patch in the same burst is kept rather than replaced: the
+    // DOM selection has not been restored yet, so re-reading it now would capture a stale offset.
+    // Anchors are keyed to characters, so the earlier one is still valid against the new document.
+    if (isFocused && !pendingCaretRef.current) {
+      pendingCaretRef.current = {
+        anchor: anchorCaret(document, element.selectionStart ?? 0),
+        head: anchorCaret(document, element.selectionEnd ?? 0),
+      };
+    }
 
     if (!document.applyAll(ops)) {
       return;
     }
 
-    applyingRemoteRef.current = true;
-    pendingCaretRef.current = caret;
     const next = document.text();
-    previousValueRef.current = next;
+    if (next === previousValueRef.current) {
+      // Nothing visible changed, so no render follows and the layout effect will not run. Leaving
+      // the flag armed would make it restore this caret after some later, unrelated edit.
+      pendingCaretRef.current = null;
+      return;
+    }
+
+    applyingRemoteRef.current = true;
     setText(next);
   }, []);
 
@@ -150,15 +166,28 @@ export default function LiveNotepad() {
           const range = cursor ? resolveSelection(document, cursor) : null;
           const position = range ? lineAndColumn(document.text(), range.end) : null;
 
-          setPresence((current) => ({
-            ...current,
-            [peerId]: {
-              line: position?.line ?? 1,
-              column: position?.column ?? 1,
-              selected: range ? range.end - range.start : 0,
-              typing: message.typing,
-            },
-          }));
+          const next: PeerPresence = {
+            line: position?.line ?? 1,
+            column: position?.column ?? 1,
+            selected: range ? range.end - range.start : 0,
+            typing: message.typing,
+          };
+
+          setPresence((current) => {
+            // Presence arrives several times a second per peer, and most of those messages say
+            // nothing new; re-rendering the whole editor for each one is wasted work.
+            const previous = current[peerId];
+            if (
+              previous &&
+              previous.line === next.line &&
+              previous.column === next.column &&
+              previous.selected === next.selected &&
+              previous.typing === next.typing
+            ) {
+              return current;
+            }
+            return { ...current, [peerId]: next };
+          });
           break;
         }
 
@@ -208,7 +237,10 @@ export default function LiveNotepad() {
   const resetDocument = useCallback(() => {
     documentRef.current = null;
     previousValueRef.current = "";
+    compositionBaseRef.current = "";
     deferredOpsRef.current = [];
+    pendingCaretRef.current = null;
+    applyingRemoteRef.current = false;
     setText("");
     setPresence({});
   }, []);
@@ -228,6 +260,10 @@ export default function LiveNotepad() {
 
   // Restoring the caret must happen before the browser paints, or the caret visibly jumps.
   useLayoutEffect(() => {
+    // Whatever has just been committed is what the DOM now shows, and therefore what the next
+    // change event must be diffed against.
+    previousValueRef.current = text;
+
     if (!applyingRemoteRef.current) {
       return;
     }
@@ -332,7 +368,6 @@ export default function LiveNotepad() {
 
     const element = textareaRef.current;
     const change = diffTextChange(previousValueRef.current, value, element?.selectionStart ?? undefined);
-    previousValueRef.current = value;
     setText(value);
 
     if (!change) {
@@ -352,8 +387,10 @@ export default function LiveNotepad() {
       return;
     }
 
-    const change = diffTextChange(previousValueRef.current, value);
-    previousValueRef.current = value;
+    // Diffed against the text as it stood before composition started. previousValueRef has been
+    // following the intermediate values the IME wrote into the field, none of which were real
+    // edits, so it is the wrong baseline here.
+    const change = diffTextChange(compositionBaseRef.current, value);
 
     if (change) {
       broadcastOps(document.replaceRange(change.start, change.end, change.inserted));
@@ -366,7 +403,6 @@ export default function LiveNotepad() {
       applyRemoteOps(deferred);
     } else if (change) {
       setText(document.text());
-      previousValueRef.current = document.text();
     }
 
     markTyping();
@@ -501,6 +537,7 @@ export default function LiveNotepad() {
             onChange={(event) => handleChange(event.target.value)}
             onCompositionStart={() => {
               compositionRef.current = true;
+              compositionBaseRef.current = previousValueRef.current;
             }}
             onCompositionEnd={(event) => handleCompositionEnd(event.currentTarget.value)}
             onSelect={() => schedulePresence(false)}

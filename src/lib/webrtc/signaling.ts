@@ -7,6 +7,8 @@
  * validated, typed events.
  */
 
+import { MAX_NAME_LENGTH, sanitizeLine } from "./protocol";
+
 export type RoomPeer = {
   readonly id: string;
   readonly name: string;
@@ -31,8 +33,12 @@ export type SignalPayload =
   | { kind: "description"; description: RTCSessionDescriptionInit }
   | { kind: "candidates"; candidates: (RTCIceCandidateInit | null)[] };
 
-/** Upper bound on candidates accepted in one relayed batch. */
-const MAX_CANDIDATES_PER_BATCH = 64;
+/**
+ * Upper bound on candidates in one relayed batch. Exported so the sender splits on exactly the
+ * limit the receiver enforces: a batch over the limit is rejected whole, which would silently
+ * drop the candidates a connection needs.
+ */
+export const MAX_CANDIDATES_PER_BATCH = 64;
 
 export type SignalingHandlers = {
   onJoined(payload: { id: string; room: string; name: string; peers: RoomPeer[] }): void;
@@ -125,7 +131,9 @@ function parseRoomPeer(value: unknown): RoomPeer | null {
   if (typeof id !== "string" || id.length === 0 || id.length > 128) {
     return null;
   }
-  return { id, name: typeof name === "string" ? name.slice(0, 48) : "" };
+  // The server scrubs names too, but this value is rendered in our UI and reaches us by relay
+  // from another peer, so it goes through the same sanitizer as every other peer-supplied string.
+  return { id, name: sanitizeLine(name, MAX_NAME_LENGTH) };
 }
 
 export class SignalingClient {
@@ -168,6 +176,10 @@ export class SignalingClient {
   leave(): void {
     this.pendingRoom = null;
     this.assignedId = null;
+    // Otherwise a leave during a reconnect backoff leaves the timer armed, and the client
+    // reconnects to a room the user has already left.
+    this.clearReconnectTimer();
+    this.reconnectAttempt = 0;
     this.send({ type: "leave" });
     this.setStatus(this.socket?.readyState === WebSocket.OPEN ? "connected" : "idle");
   }
@@ -247,12 +259,14 @@ export class SignalingClient {
         return;
       }
       this.socket = null;
-      this.assignedId = null;
 
       if (this.closedByCaller) {
         return;
       }
 
+      // The assigned id is deliberately kept: re-joining with it is what lets the server hand
+      // this peer its own identity back, so the other peers recognise it instead of tearing the
+      // whole mesh down and rebuilding it. It is only forgotten on an explicit leave or close.
       this.scheduleReconnect();
     };
   }
@@ -332,7 +346,7 @@ export class SignalingClient {
         this.handlers.onJoined({
           id,
           room,
-          name: typeof name === "string" ? name : "",
+          name: sanitizeLine(name, MAX_NAME_LENGTH),
           peers: roster,
         });
         break;

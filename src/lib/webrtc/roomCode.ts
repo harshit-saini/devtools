@@ -104,7 +104,18 @@ export function readRoomHash(hash: string): string | null {
   if (!normalized.toLowerCase().startsWith(ROOM_HASH_PREFIX)) {
     return null;
   }
-  return normalizeRoomCode(decodeURIComponent(normalized.slice(ROOM_HASH_PREFIX.length)));
+
+  const raw = normalized.slice(ROOM_HASH_PREFIX.length);
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    // decodeURIComponent throws URIError on a malformed escape such as "#room=%zz". The fragment
+    // comes straight from the address bar, so anyone can put one there - and this is read during
+    // render, where an exception would take down the whole tool rather than just the room code.
+  }
+
+  return normalizeRoomCode(decoded);
 }
 
 /** Shareable link for a room, with the code in the fragment. */

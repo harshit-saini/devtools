@@ -39,6 +39,9 @@ export type SessionSnapshot = {
   readonly error: SessionError | null;
 };
 
+/** Errors that describe a peer that is already gone, rather than anything the user can act on. */
+const TRANSIENT_ERROR_CODES = new Set(["target-not-found", "target-not-in-room"]);
+
 const EMPTY_SNAPSHOT: SessionSnapshot = {
   status: "idle",
   room: null,
@@ -95,6 +98,11 @@ export class PeerSessionController {
         this.publish();
       },
       onError: (error) => {
+        // A relay rejection for a peer that has just left is routine churn, not something to put
+        // in front of the user - and it names a raw peer id, which means nothing to them.
+        if (TRANSIENT_ERROR_CODES.has(error.code)) {
+          return;
+        }
         this.error = error;
         this.publish();
       },
@@ -184,6 +192,8 @@ export class PeerSessionController {
 
     this.selfId = id;
     this.room = room;
+    // Getting in clears whatever went wrong on the way.
+    this.error = null;
     if (name) {
       this.displayName = name;
     }
@@ -328,9 +338,16 @@ export function usePeerSession(options: UsePeerSessionOptions): PeerSession {
 
     setController(instance);
 
-    // Leaving the page should release the room slot promptly rather than waiting for the
-    // server's heartbeat to notice. pagehide fires for navigations and tab closes alike.
-    const handlePageHide = () => instance.close();
+    // Leaving the page should release the room slot promptly rather than waiting for the server's
+    // heartbeat to notice. `persisted` distinguishes the two cases pagehide covers: a real
+    // navigation or tab close, where the session is finished, from the page being frozen into the
+    // back/forward cache, where closing it would leave an inert tool behind on restore. A frozen
+    // page's socket is dropped by the browser anyway, and the reconnect backoff picks it up.
+    const handlePageHide = (event: PageTransitionEvent) => {
+      if (!event.persisted) {
+        instance.close();
+      }
+    };
     window.addEventListener("pagehide", handlePageHide);
 
     return () => {

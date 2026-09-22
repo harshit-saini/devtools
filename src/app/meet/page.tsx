@@ -331,6 +331,7 @@ export default function Meet() {
                   showVideo={state ? state.camera || state.screen : Boolean(peer.stream)}
                   muted={state ? !state.microphone : false}
                   badge={state?.screen ? "Screen" : undefined}
+                  trackEpoch={peer.trackEpoch}
                 />
               );
             })}

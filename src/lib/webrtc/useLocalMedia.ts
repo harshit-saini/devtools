@@ -89,7 +89,9 @@ export type UseLocalMediaOptions = {
 
 export function useLocalMedia(options: UseLocalMediaOptions = {}) {
   const optionsRef = useRef(options);
-  optionsRef.current = options;
+  useEffect(() => {
+    optionsRef.current = options;
+  });
 
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [cameraOn, setCameraOn] = useState(false);
@@ -103,6 +105,13 @@ export function useLocalMedia(options: UseLocalMediaOptions = {}) {
   const streamRef = useRef<MediaStream | null>(null);
   const screenTrackRef = useRef<MediaStreamTrack | null>(null);
   const cameraTrackRef = useRef<MediaStreamTrack | null>(null);
+  const microphoneTrackRef = useRef<MediaStreamTrack | null>(null);
+  /**
+   * Bumped by anything that releases devices. A getUserMedia promise started before that resolves
+   * afterwards holding live tracks that nothing is tracking any more - the classic "camera light
+   * stays on after leaving the page" bug - so the generation is compared on the way out.
+   */
+  const generationRef = useRef(0);
 
   const publishStream = useCallback((next: MediaStream | null) => {
     // An empty stream is reported as no stream at all: it is the difference between "this person
@@ -150,11 +159,22 @@ export function useLocalMedia(options: UseLocalMediaOptions = {}) {
       }
 
       setBusy(true);
+      const generation = generationRef.current;
       try {
         const captured = await navigator.mediaDevices.getUserMedia({
           video: want.video ? { width: { ideal: 1280 }, height: { ideal: 720 } } : false,
           audio: want.audio ? { echoCancellation: true, noiseSuppression: true } : false,
         });
+
+        // The permission prompt can sit open for a long time, so the user may have left the page
+        // or stopped their media before this resolved. Releasing here is the only chance: nothing
+        // else holds a reference to these tracks.
+        if (generation !== generationRef.current) {
+          for (const track of captured.getTracks()) {
+            track.stop();
+          }
+          return;
+        }
 
         const target = ensureStream();
 
@@ -169,6 +189,10 @@ export function useLocalMedia(options: UseLocalMediaOptions = {}) {
             }
             setCameraOn(true);
           } else {
+            // Replacing an existing microphone track means releasing it, or the old one keeps the
+            // device open for the rest of the session.
+            stopTrack(microphoneTrackRef.current);
+            microphoneTrackRef.current = track;
             target.addTrack(track);
             setMicrophoneOn(true);
           }
@@ -202,7 +226,7 @@ export function useLocalMedia(options: UseLocalMediaOptions = {}) {
   }, [cameraOn, publishStream, start, stopTrack]);
 
   const toggleMicrophone = useCallback(async () => {
-    const audioTrack = streamRef.current?.getAudioTracks()[0] ?? null;
+    const audioTrack = microphoneTrackRef.current ?? streamRef.current?.getAudioTracks()[0] ?? null;
 
     if (!audioTrack) {
       await start({ video: false, audio: true });
@@ -292,10 +316,13 @@ export function useLocalMedia(options: UseLocalMediaOptions = {}) {
   }, [screenOn, startScreenShare, stopScreenShare]);
 
   const stopAll = useCallback(() => {
+    generationRef.current += 1;
     stopTrack(screenTrackRef.current);
     screenTrackRef.current = null;
     stopTrack(cameraTrackRef.current);
     cameraTrackRef.current = null;
+    stopTrack(microphoneTrackRef.current);
+    microphoneTrackRef.current = null;
 
     // Any track the stream still holds - a microphone, or one swapped out earlier - is released
     // here, because a track that is merely detached keeps its device open.
@@ -314,11 +341,17 @@ export function useLocalMedia(options: UseLocalMediaOptions = {}) {
   // leaves the indicator light on until the tab is closed.
   useEffect(() => {
     return () => {
-      const screenTrack = screenTrackRef.current;
-      const cameraTrack = cameraTrackRef.current;
-      const active = streamRef.current;
+      // Invalidates any getUserMedia still in flight, so a late-resolving one releases itself.
+      generationRef.current += 1;
 
-      for (const track of [screenTrack, cameraTrack, ...(active?.getTracks() ?? [])]) {
+      const held = [
+        screenTrackRef.current,
+        cameraTrackRef.current,
+        microphoneTrackRef.current,
+        ...(streamRef.current?.getTracks() ?? []),
+      ];
+
+      for (const track of held) {
         if (track) {
           track.onended = null;
           track.stop();
@@ -327,6 +360,7 @@ export function useLocalMedia(options: UseLocalMediaOptions = {}) {
 
       screenTrackRef.current = null;
       cameraTrackRef.current = null;
+      microphoneTrackRef.current = null;
       streamRef.current = null;
     };
   }, []);

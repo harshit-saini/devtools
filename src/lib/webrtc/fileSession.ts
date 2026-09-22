@@ -69,6 +69,7 @@ export interface TransferTransport {
 
 type OutgoingTransfer = {
   file: File;
+  peerId: string;
   cancelled: boolean;
   /** Resolves the current wait for the channel to drain. */
   resumeDrain: (() => void) | null;
@@ -78,11 +79,21 @@ type OutgoingTransfer = {
 
 type IncomingTransfer = {
   offer: FileOffer;
+  peerId: string;
   chunks: Uint8Array[];
-  chunkDigests: ArrayBuffer[];
+  /**
+   * Indexed by chunk number, not appended. Digesting is async and several chunk handlers can be
+   * in flight at once, so appending would record them in completion order and produce a digest
+   * that does not match the sender's for a perfectly intact file.
+   */
+  chunkDigests: (ArrayBuffer | undefined)[];
   bytesReceived: number;
   nextChunkIndex: number;
   cancelled: boolean;
+  /** Serializes the async digest work, and guarantees completion is handled exactly once. */
+  digestQueue: Promise<void>;
+  finishing: boolean;
+  lastProgressAt: number;
 };
 
 export type FileSessionCallbacks = {
@@ -148,7 +159,7 @@ export class FileSession {
       status: "hashing",
     });
 
-    this.outgoing.set(key, { file, cancelled: false, resumeDrain: null, abortDrain: null });
+    this.outgoing.set(key, { file, peerId, cancelled: false, resumeDrain: null, abortDrain: null });
 
     let digest: string;
     try {
@@ -202,11 +213,15 @@ export class FileSession {
 
     this.incoming.set(key, {
       offer,
+      peerId,
       chunks: [],
       chunkDigests: [],
       bytesReceived: 0,
       nextChunkIndex: 0,
       cancelled: false,
+      digestQueue: Promise.resolve(),
+      finishing: false,
+      lastProgressAt: 0,
     });
   }
 
@@ -232,7 +247,7 @@ export class FileSession {
       return;
     }
 
-    this.incoming.delete(key);
+    this.dropIncoming(key);
     transfer.status = "declined";
     this.emit(transfer);
     this.sendControl(peerId, { type: "file-decline", transferId });
@@ -287,7 +302,7 @@ export class FileSession {
       }
 
       this.stopOutgoing(key);
-      this.incoming.delete(key);
+      this.dropIncoming(key);
       transfer.status = "cancelled";
       this.emit(transfer);
     }
@@ -302,7 +317,7 @@ export class FileSession {
     }
 
     this.stopOutgoing(key);
-    this.incoming.delete(key);
+    this.dropIncoming(key);
     transfer.status = "cancelled";
     this.emit(transfer);
     this.sendControl(peerId, { type: "file-cancel", transferId });
@@ -315,12 +330,12 @@ export class FileSession {
    * pushing bytes at us unasked. An out-of-order index or an overlong payload means the stream is
    * not what was offered, so the transfer is failed rather than patched up.
    */
-  async handleChunk(peerId: string, frame: ChunkFrame): Promise<void> {
+  handleChunk(peerId: string, frame: ChunkFrame): void {
     const key = transferKey("incoming", peerId, frame.transferId);
     const transfer = this.transfers.get(key);
     const state = this.incoming.get(key);
 
-    if (!transfer || !state || transfer.status !== "transferring") {
+    if (!transfer || !state || state.cancelled || transfer.status !== "transferring") {
       return;
     }
 
@@ -336,31 +351,46 @@ export class FileSession {
       return;
     }
 
+    // All bookkeeping is synchronous, so two chunk handlers can never interleave over it. Only
+    // the digesting below is deferred, and it is serialized.
     // The frame's payload is a view onto the received message buffer; copying it here keeps each
     // stored chunk independent of that buffer and of anything else the channel delivered.
     const chunk = new Uint8Array(frame.payload);
+    const index = frame.chunkIndex;
     state.chunks.push(chunk);
     state.bytesReceived += chunk.byteLength;
     state.nextChunkIndex += 1;
 
-    try {
-      state.chunkDigests.push(await crypto.subtle.digest("SHA-256", chunk));
-    } catch {
-      this.fail(transfer, "This browser cannot verify the transfer");
-      this.incoming.delete(key);
-      return;
+    const isLast = state.bytesReceived >= transfer.size;
+    const now = this.now();
+    if (isLast || now - state.lastProgressAt >= PROGRESS_INTERVAL_MS) {
+      // Throttled: a 256 MB transfer is 16,000 chunks, and one render each would lock the tab up.
+      state.lastProgressAt = now;
+      transfer.progress = computeProgress(state.bytesReceived, transfer.size, 0);
+      this.emit(transfer);
     }
 
-    if (state.cancelled) {
-      return;
-    }
+    state.digestQueue = state.digestQueue
+      .then(async () => {
+        if (state.cancelled || this.closed) {
+          return;
+        }
 
-    transfer.progress = computeProgress(state.bytesReceived, transfer.size, 0);
-    this.emit(transfer);
+        state.chunkDigests[index] = await crypto.subtle.digest("SHA-256", chunk);
 
-    if (state.bytesReceived >= transfer.size) {
-      await this.finishIncoming(transfer, state, peerId);
-    }
+        // Only the handler that queued the final chunk finishes the transfer, and it runs after
+        // every earlier digest has been recorded.
+        if (isLast && !state.finishing) {
+          state.finishing = true;
+          await this.finishIncoming(transfer, state, peerId);
+        }
+      })
+      .catch(() => {
+        if (!state.cancelled) {
+          this.fail(transfer, "Could not verify the transfer");
+        }
+        this.incoming.delete(key);
+      });
   }
 
   /** Called when a peer disappears, so its in-flight transfers do not sit pending forever. */
@@ -371,7 +401,7 @@ export class FileSession {
       }
 
       this.stopOutgoing(transfer.key);
-      this.incoming.delete(transfer.key);
+      this.dropIncoming(transfer.key);
       transfer.status = "failed";
       transfer.error = "The peer disconnected";
       this.emit(transfer);
@@ -380,8 +410,11 @@ export class FileSession {
 
   /** The channel drained; wake any sender parked on backpressure. */
   handleDrain(peerId: string): void {
-    for (const [key, state] of this.outgoing) {
-      if (key.includes(`:${peerId}:`) && state.resumeDrain) {
+    for (const state of this.outgoing.values()) {
+      // Compared against the stored peer id rather than matched inside the composite key: a peer
+      // id may itself contain a colon, which would make a substring match resume the wrong
+      // transfers.
+      if (state.peerId === peerId && state.resumeDrain) {
         const resume = state.resumeDrain;
         state.resumeDrain = null;
         state.abortDrain = null;
@@ -396,7 +429,9 @@ export class FileSession {
     for (const key of [...this.outgoing.keys()]) {
       this.stopOutgoing(key);
     }
-    this.incoming.clear();
+    for (const key of [...this.incoming.keys()]) {
+      this.dropIncoming(key);
+    }
 
     for (const transfer of this.transfers.values()) {
       if (transfer.blobUrl) {
@@ -434,7 +469,11 @@ export class FileSession {
       try {
         await this.waitForDrain(transfer.peerId, state);
       } catch (error) {
-        this.fail(transfer, error instanceof Error ? error.message : "Transfer stalled");
+        // A cancellation unparks the wait by rejecting it, and the cancel path has already set
+        // the status; reporting a failure over the top of it would be wrong.
+        if (!state.cancelled && !this.closed) {
+          this.fail(transfer, error instanceof Error ? error.message : "Transfer stalled");
+        }
         return;
       }
 
@@ -511,7 +550,11 @@ export class FileSession {
 
     let digest: string;
     try {
-      digest = await digestChunkDigests(state.chunkDigests);
+      const digests = state.chunkDigests;
+      if (digests.some((entry) => entry === undefined)) {
+        throw new Error("A chunk digest is missing");
+      }
+      digest = await digestChunkDigests(digests as ArrayBuffer[]);
     } catch {
       this.fail(transfer, "Could not verify the transfer");
       this.incoming.delete(transfer.key);
@@ -519,6 +562,12 @@ export class FileSession {
     }
 
     this.incoming.delete(transfer.key);
+
+    // A session closed while the last chunks were being digested has already cleared its
+    // transfers, so an object URL created now would leak for the life of the document.
+    if (this.closed || state.cancelled) {
+      return;
+    }
 
     if (digest !== state.offer.digest) {
       transfer.status = "corrupt";
@@ -548,6 +597,19 @@ export class FileSession {
     this.transfers.set(init.key, transfer);
     this.emit(transfer);
     return transfer;
+  }
+
+  /**
+   * Forgets an incoming transfer. The flag matters as much as the removal: a digest task queued
+   * earlier still holds a reference to this state, and must not go on to finish or fail a
+   * transfer the user has already dealt with.
+   */
+  private dropIncoming(key: string): void {
+    const state = this.incoming.get(key);
+    if (state) {
+      state.cancelled = true;
+    }
+    this.incoming.delete(key);
   }
 
   private stopOutgoing(key: string): void {

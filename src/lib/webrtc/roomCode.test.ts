@@ -157,3 +157,24 @@ describe("peer identity helpers", () => {
     expect(name.length).toBeLessThanOrEqual(48);
   });
 });
+
+describe("readRoomHash resilience", () => {
+  it("does not throw on a malformed percent escape", () => {
+    // The fragment comes straight from the address bar and is read during render, so a URIError
+    // here would take down the whole tool rather than just the room code.
+    expect(() => readRoomHash("#room=%zz")).not.toThrow();
+    expect(readRoomHash("#room=%zz")).toBeNull();
+    expect(() => readRoomHash("#room=%")).not.toThrow();
+    expect(() => readRoomHash("#room=%E0%A4%A")).not.toThrow();
+    expect(() => extractRoomCode("https://x.example/meet#room=%zz")).not.toThrow();
+  });
+
+  it("still reads a usable code that happens to contain an escape", () => {
+    expect(readRoomHash("#room=swift%2Dotter%2D481920")).toBe("swift-otter-481920");
+  });
+
+  it("recovers a bare code from an unparseable percent escape", () => {
+    // "%zz" is dropped by normalization rather than aborting the whole read.
+    expect(readRoomHash("#room=swift-otter-481920%zz")).toBe("swift-otter-481920zz");
+  });
+});
