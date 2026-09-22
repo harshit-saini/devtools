@@ -74,6 +74,8 @@ type PeerEntry = {
   isSettingRemoteAnswerPending: boolean;
   /** Candidates that arrived before a remote description existed to attach them to. */
   pendingCandidates: RTCIceCandidateInit[];
+  /** Serializes relayed payloads for this peer; see handleSignal. */
+  signalQueue: Promise<void>;
   /** Locally gathered candidates waiting to be relayed as one batch. */
   outgoingCandidates: (RTCIceCandidateInit | null)[];
   candidateFlushTimer: number | null;
@@ -157,6 +159,7 @@ export class PeerMesh {
       ignoreOffer: false,
       isSettingRemoteAnswerPending: false,
       pendingCandidates: [],
+      signalQueue: Promise.resolve(),
       outgoingCandidates: [],
       candidateFlushTimer: null,
       stream: null,
@@ -202,10 +205,28 @@ export class PeerMesh {
     this.publish();
   }
 
-  /** Routes a relayed payload to the right connection. */
-  async handleSignal(from: string, payload: SignalPayload): Promise<void> {
+  /**
+   * Routes a relayed payload to the right connection, one payload at a time per peer.
+   *
+   * The serialization matters: perfect negotiation reasons about `signalingState` and its own
+   * flags across await points, so it is only correct if messages are handled sequentially. Two
+   * descriptions processed concurrently - which a renegotiation collision produces - would call
+   * `setRemoteDescription` twice from the same state, and the loser would be rejected and its
+   * negotiation round silently lost.
+   */
+  handleSignal(from: string, payload: SignalPayload): Promise<void> {
     const entry = this.peers.get(from);
     if (!entry || this.closed) {
+      return Promise.resolve();
+    }
+
+    entry.signalQueue = entry.signalQueue.then(() => this.processSignal(entry, payload));
+    return entry.signalQueue;
+  }
+
+  private async processSignal(entry: PeerEntry, payload: SignalPayload): Promise<void> {
+    // The peer may have left, or the mesh been torn down, while this payload waited its turn.
+    if (this.closed || this.peers.get(entry.id) !== entry) {
       return;
     }
 
@@ -220,7 +241,8 @@ export class PeerMesh {
       }
     } catch {
       // A rejected description or candidate means this negotiation round failed; ICE restart or
-      // the connection-state watcher below will recover it. Nothing useful to surface here.
+      // the connection-state watcher below will recover it. Nothing useful to surface here, and
+      // swallowing it here is what keeps the queue alive for the next payload.
     }
   }
 
