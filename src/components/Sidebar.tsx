@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
@@ -71,17 +71,15 @@ export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [query, setQuery] = useState("");
 
-  useEffect(() => {
+  // useLayoutEffect (not useEffect) so the collapsed state is restored before the browser paints,
+  // avoiding a visible flash of the expanded sidebar on every load when it was left collapsed.
+  useLayoutEffect(() => {
     const storedValue = window.localStorage.getItem(SIDEBAR_KEY);
     if (storedValue === null) {
       return;
     }
 
-    const timeoutId = window.setTimeout(() => {
-      setIsCollapsed(storedValue === "true");
-    }, 0);
-
-    return () => window.clearTimeout(timeoutId);
+    setIsCollapsed(storedValue === "true");
   }, []);
 
   const groupedItems = useMemo(() => {

@@ -164,8 +164,6 @@ export const siteRoutes: SiteRoute[] = [
   },
 ];
 
-export const toolRoutes = siteRoutes.filter((route) => route.path !== "/");
-
 export function toAbsoluteUrl(path: string): string {
   return new URL(path, siteUrl).toString();
 }
