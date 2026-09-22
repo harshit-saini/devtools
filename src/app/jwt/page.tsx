@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Clipboard, KeyRound, RotateCcw } from "lucide-react";
+import { Clipboard, Eye, EyeOff, KeyRound, RotateCcw } from "lucide-react";
 import styles from "./jwt.module.css";
 import ToolFullscreenButton from "@/components/ToolFullscreenButton";
 import { useToolFullscreen } from "@/components/useToolFullscreen";
@@ -27,7 +27,12 @@ type ValidationMessage = {
 function decodeBase64Url(segment: string): string {
   const normalized = segment.replace(/-/g, "+").replace(/_/g, "/");
   const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
-  return atob(padded);
+  const binary = atob(padded);
+  // atob() returns a Latin-1/binary string, but JWT payloads are UTF-8 encoded JSON - decoding
+  // straight from that binary string (rather than the underlying bytes as UTF-8) mangles any
+  // non-ASCII claim (accented names, CJK text, emoji).
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder("utf-8").decode(bytes);
 }
 
 function decodeJwt(token: string): DecodedJwt {
@@ -150,6 +155,7 @@ export default function JwtDecoderPage() {
   const [expectedAudience, setExpectedAudience] = useState("");
   const [expectedSubject, setExpectedSubject] = useState("");
   const [hmacSecret, setHmacSecret] = useState("");
+  const [showSecret, setShowSecret] = useState(false);
   const [validationMessages, setValidationMessages] = useState<ValidationMessage[]>([]);
 
   const decoded = useMemo(() => decodeJwt(token), [token]);
@@ -331,8 +337,11 @@ export default function JwtDecoderPage() {
       </div>
 
       <section className={`${styles.tokenBlock} panel`}>
-        <label className={styles.label}>JWT token</label>
+        <label className={styles.label} htmlFor="jwt-token-input">
+          JWT token
+        </label>
         <textarea
+          id="jwt-token-input"
           className={styles.tokenInput}
           value={token}
           onChange={(event) => setToken(event.target.value)}
@@ -395,12 +404,25 @@ export default function JwtDecoderPage() {
           </label>
           <label className={styles.fieldLabel}>
             Shared secret (HS*)
-            <input
-              className={styles.textInput}
-              value={hmacSecret}
-              onChange={(event) => setHmacSecret(event.target.value)}
-              placeholder="Optional: verify HS256/384/512 signature"
-            />
+            <div className={styles.secretRow}>
+              <input
+                className={styles.textInput}
+                type={showSecret ? "text" : "password"}
+                value={hmacSecret}
+                onChange={(event) => setHmacSecret(event.target.value)}
+                placeholder="Optional: verify HS256/384/512 signature"
+                autoComplete="off"
+              />
+              <button
+                type="button"
+                className={styles.secretToggle}
+                onClick={() => setShowSecret((current) => !current)}
+                aria-label={showSecret ? "Hide secret" : "Show secret"}
+                title={showSecret ? "Hide secret" : "Show secret"}
+              >
+                {showSecret ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
           </label>
         </div>
 
