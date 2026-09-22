@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { FileSession, type Transfer } from "./fileSession";
+import { FileSession, MAX_PENDING_OFFERS_PER_PEER, type Transfer } from "./fileSession";
 import {
   CHUNK_PAYLOAD_BYTES,
   chunkCount,
@@ -336,6 +336,98 @@ describe("FileSession receive path", () => {
     const transfer = transfers.get(`incoming:${PEER}:${transferId}`);
     expect(transfer?.status).toBe("failed");
     expect(transfer?.error).toMatch(/disconnected/i);
+
+    session.close();
+  });
+
+  it("stops retaining offers from a peer that floods them, and keeps declining", () => {
+    // An offer holds no payload, so this is not about memory: every retained offer makes the next
+    // one more expensive to record, because the page rebuilds its transfer map per message. Left
+    // unbounded that is quadratic, and a few MB of offers pins the main thread for minutes - long
+    // enough that the Leave button never gets processed either.
+    const { session, control, transfers } = harness();
+
+    for (let index = 0; index < MAX_PENDING_OFFERS_PER_PEER + 200; index += 1) {
+      session.receiveOffer(PEER, {
+        transferId: 1000 + index,
+        name: `flood-${index}.bin`,
+        size: 1024,
+        mime: "application/octet-stream",
+        digest: "a".repeat(64),
+      });
+    }
+
+    const retained = [...transfers.values()].filter(
+      (transfer) => transfer.direction === "incoming" && transfer.status === "offered",
+    );
+    expect(retained).toHaveLength(MAX_PENDING_OFFERS_PER_PEER);
+
+    // Everything past the cap is refused, so the sender is told rather than left waiting.
+    const declines = control.filter((entry) => entry.type === "file-decline");
+    expect(declines).toHaveLength(200);
+
+    session.close();
+  });
+
+  it("frees room for new offers as the user works through the queue", () => {
+    const { session, transfers } = harness();
+
+    for (let index = 0; index < MAX_PENDING_OFFERS_PER_PEER; index += 1) {
+      session.receiveOffer(PEER, {
+        transferId: 2000 + index,
+        name: `queued-${index}.bin`,
+        size: 1024,
+        mime: "application/octet-stream",
+        digest: "b".repeat(64),
+      });
+    }
+
+    // At the cap, the next offer is refused.
+    session.receiveOffer(PEER, {
+      transferId: 9998,
+      name: "refused.bin",
+      size: 1024,
+      mime: "application/octet-stream",
+      digest: "c".repeat(64),
+    });
+    expect(transfers.has(`incoming:${PEER}:9998`)).toBe(false);
+
+    // Deciding on one makes room again: the cap counts undecided offers, not history.
+    session.declineOffer(PEER, 2000);
+    session.receiveOffer(PEER, {
+      transferId: 9999,
+      name: "accepted-later.bin",
+      size: 1024,
+      mime: "application/octet-stream",
+      digest: "d".repeat(64),
+    });
+    expect(transfers.get(`incoming:${PEER}:9999`)?.status).toBe("offered");
+
+    session.close();
+  });
+
+  it("counts the cap per peer, so one flooder cannot crowd out another peer", () => {
+    const { session, transfers } = harness();
+
+    for (let index = 0; index < MAX_PENDING_OFFERS_PER_PEER + 50; index += 1) {
+      session.receiveOffer("flooder", {
+        transferId: 3000 + index,
+        name: `flood-${index}.bin`,
+        size: 1024,
+        mime: "application/octet-stream",
+        digest: "e".repeat(64),
+      });
+    }
+
+    session.receiveOffer("colleague", {
+      transferId: 4000,
+      name: "wanted.bin",
+      size: 1024,
+      mime: "application/octet-stream",
+      digest: "f".repeat(64),
+    });
+
+    expect(transfers.get("incoming:colleague:4000")?.status).toBe("offered");
 
     session.close();
   });

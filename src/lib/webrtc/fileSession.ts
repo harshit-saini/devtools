@@ -56,6 +56,12 @@ export type Transfer = {
 const PROGRESS_INTERVAL_MS = 100;
 
 /**
+ * How many undecided offers one peer may have outstanding. Generous enough for someone dropping a
+ * folder of files in one go, low enough that a peer cannot make the receive path quadratic.
+ */
+export const MAX_PENDING_OFFERS_PER_PEER = 64;
+
+/**
  * Everything this session needs from the network. `PeerMesh` satisfies it structurally, so the
  * mesh can be handed over directly once a room is joined - and until then the session simply has
  * no transport and every send reports failure.
@@ -197,6 +203,18 @@ export class FileSession {
 
     const key = transferKey("incoming", peerId, offer.transferId);
     if (this.transfers.has(key)) {
+      return;
+    }
+
+    // Declined without being recorded once a peer has this many offers outstanding.
+    //
+    // An offer holds no payload, so the cost is not memory - it is that every retained offer makes
+    // the *next* one more expensive to record, because the consuming component rebuilds its
+    // transfer map per message. That is quadratic, and a peer sending a few MB of offers can pin
+    // the main thread for minutes, which also stops the Leave button from ever being processed.
+    // Bounding what is retained keeps the per-message cost flat.
+    if (this.pendingOffersFrom(peerId) >= MAX_PENDING_OFFERS_PER_PEER) {
+      this.sendControl(peerId, { type: "file-decline", transferId: offer.transferId });
       return;
     }
 
@@ -597,6 +615,17 @@ export class FileSession {
     this.transfers.set(init.key, transfer);
     this.emit(transfer);
     return transfer;
+  }
+
+  /** Offers from `peerId` the user has not yet accepted or declined. */
+  private pendingOffersFrom(peerId: string): number {
+    let count = 0;
+    for (const transfer of this.transfers.values()) {
+      if (transfer.direction === "incoming" && transfer.peerId === peerId && transfer.status === "offered") {
+        count += 1;
+      }
+    }
+    return count;
   }
 
   /**
