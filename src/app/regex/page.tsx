@@ -177,8 +177,11 @@ export default function RegexTesterPage() {
       </div>
 
       <section className={`${styles.patternCard} panel`}>
-        <label className={styles.label}>Pattern</label>
+        <label className={styles.label} htmlFor="regex-pattern-input">
+          Pattern
+        </label>
         <input
+          id="regex-pattern-input"
           className={styles.patternInput}
           value={pattern}
           onChange={(event) => setPattern(event.target.value)}
@@ -219,7 +222,11 @@ export default function RegexTesterPage() {
 
         <section className={`${styles.block} panel`}>
           <h3>Replacement</h3>
+          <label className={styles.srOnly} htmlFor="regex-replacement-input">
+            Replacement template
+          </label>
           <input
+            id="regex-replacement-input"
             className={styles.replacementInput}
             value={replacement}
             onChange={(event) => setReplacement(event.target.value)}
