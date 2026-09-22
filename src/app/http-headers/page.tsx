@@ -103,8 +103,14 @@ export default function HttpHeadersPage() {
   const { containerRef, isFullscreen, fullscreenSupported, toggleFullscreen } =
     useToolFullscreen<HTMLDivElement>();
 
-  const [raw, setRaw] = useState(() => readLocalString(RAW_KEY, SAMPLE_RAW));
+  // Initial state intentionally matches what the server renders (the hardcoded sample, not
+  // localStorage) so hydration never mismatches. Saved value is restored once, after mount, below.
+  const [raw, setRaw] = useState(SAMPLE_RAW);
   const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    setRaw(readLocalString(RAW_KEY, SAMPLE_RAW));
+  }, []);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {

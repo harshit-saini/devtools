@@ -126,6 +126,14 @@ export default function CsvViewer() {
     <div
       ref={containerRef}
       className={`${styles.container} pageShell animate-enter ${isFullscreen ? "toolFullscreen" : ""}`}
+      onDragOver={(event) => {
+        event.preventDefault();
+        if (!hasData) {
+          setIsDragging(true);
+        }
+      }}
+      onDragLeave={() => setIsDragging(false)}
+      onDrop={handleDrop}
     >
       <header className="toolHeader">
         <div>
@@ -175,6 +183,7 @@ export default function CsvViewer() {
             <input
               className={styles.searchInput}
               placeholder="Filter rows"
+              aria-label="Filter rows"
               value={quickFilterText}
               onChange={(event) => setQuickFilterText(event.target.value)}
             />
@@ -195,9 +204,6 @@ export default function CsvViewer() {
                 pagination
                 paginationPageSize={100}
                 paginationPageSizeSelector={[25, 50, 100, 250]}
-                sideBar={{
-                  toolPanels: ["columns", "filters"],
-                }}
               />
             </div>
           </section>
@@ -205,17 +211,12 @@ export default function CsvViewer() {
       ) : (
         <section
           className={`${styles.uploadCard} panel ${isDragging ? styles.dragActive : ""}`}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setIsDragging(true);
-          }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
           role="button"
           tabIndex={0}
           onKeyDown={(event) => {
             if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
               fileInputRef.current?.click();
             }
           }}

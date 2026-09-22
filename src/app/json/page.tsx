@@ -57,24 +57,24 @@ export default function JsonFormatterPage() {
     return () => window.clearTimeout(timeoutId);
   }, [notice]);
 
-  const parseInput = (): unknown | null => {
+  const parseInput = (): { ok: true; value: unknown } | { ok: false } => {
     try {
       const parsed = JSON.parse(input);
       setError("");
-      return parsed;
+      return { ok: true, value: parsed };
     } catch (parseError) {
       setError(parseError instanceof Error ? parseError.message : "Invalid JSON");
-      return null;
+      return { ok: false };
     }
   };
 
   const runTransform = (label: string, transformer: (value: unknown) => string) => {
-    const parsed = parseInput();
-    if (!parsed) {
+    const result = parseInput();
+    if (!result.ok) {
       return;
     }
 
-    setOutput(transformer(parsed));
+    setOutput(transformer(result.value));
     setNotice(label);
   };
 

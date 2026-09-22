@@ -6,8 +6,8 @@
 .cellActions { display: flex; gap: 0.5rem; }
 .codeInput {
   width: 100%; min-height: 150px; border-radius: 12px; border: 1px solid var(--border-color);
-  background: rgba(6, 10, 18, 0.65); color: var(--foreground);
-  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  background: rgba(20, 26, 33, 0.94); color: #e6f4f1;
+  font-family: "IBM Plex Mono", Consolas, monospace;
   font-size: 0.9rem; line-height: 1.5; padding: 0.9rem; resize: vertical;
 }
 .output {

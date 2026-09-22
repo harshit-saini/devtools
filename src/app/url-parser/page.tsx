@@ -104,10 +104,16 @@ export default function UrlParserPage() {
   const { containerRef, isFullscreen, fullscreenSupported, toggleFullscreen } =
     useToolFullscreen<HTMLDivElement>();
 
-  const [urlText, setUrlText] = useState(() => readLocalString(URL_KEY, SAMPLE_URL));
+  // Initial state intentionally matches what the server renders (the hardcoded sample, not
+  // localStorage) so hydration never mismatches. Saved value is restored once, after mount, below.
+  const [urlText, setUrlText] = useState(SAMPLE_URL);
   const [encodeInput, setEncodeInput] = useState("hello world/devtools?");
   const [decodeInput, setDecodeInput] = useState("hello%20world%2Fdevtools%3F");
   const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    setUrlText(readLocalString(URL_KEY, SAMPLE_URL));
+  }, []);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {

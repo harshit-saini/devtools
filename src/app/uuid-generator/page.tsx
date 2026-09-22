@@ -98,21 +98,29 @@ export default function UuidGeneratorPage() {
   const { containerRef, isFullscreen, fullscreenSupported, toggleFullscreen } =
     useToolFullscreen<HTMLDivElement>();
 
-  const [version, setVersion] = useState<UuidVersion>(() => {
-    const stored = readLocalString(VERSION_KEY, "v4");
-    return stored === "v7" ? "v7" : "v4";
-  });
-  const [count, setCount] = useState(() => clampCount(Number(readLocalString(COUNT_KEY, String(DEFAULT_COUNT)))));
-  const [uppercase, setUppercase] = useState(() => readLocalBoolean(UPPERCASE_KEY, false));
-  const [hyphens, setHyphens] = useState(() => readLocalBoolean(HYPHENS_KEY, true));
-  const [wrap, setWrap] = useState<WrapStyle>(() => {
-    const stored = readLocalString(WRAP_KEY, "none");
-    return stored === "braces" || stored === "quotes" ? stored : "none";
-  });
-  const [rawItems, setRawItems] = useState<string[]>(() =>
-    Array.from({ length: DEFAULT_COUNT }, () => generateUuid("v4")),
-  );
+  // Initial state below intentionally matches what the server renders (hardcoded defaults, not
+  // localStorage) so hydration never mismatches. rawItems starts empty for the same reason:
+  // crypto.randomUUID() also runs during SSR, so generating the sample batch during the initial
+  // render would bake one random set into the server HTML and produce a different one on the
+  // client's hydration render. Real values are restored/generated once, after mount, below.
+  const [version, setVersion] = useState<UuidVersion>("v4");
+  const [count, setCount] = useState(DEFAULT_COUNT);
+  const [uppercase, setUppercase] = useState(false);
+  const [hyphens, setHyphens] = useState(true);
+  const [wrap, setWrap] = useState<WrapStyle>("none");
+  const [rawItems, setRawItems] = useState<string[]>([]);
   const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    const storedVersion = readLocalString(VERSION_KEY, "v4");
+    setVersion(storedVersion === "v7" ? "v7" : "v4");
+    setCount(clampCount(Number(readLocalString(COUNT_KEY, String(DEFAULT_COUNT)))));
+    setUppercase(readLocalBoolean(UPPERCASE_KEY, false));
+    setHyphens(readLocalBoolean(HYPHENS_KEY, true));
+    const storedWrap = readLocalString(WRAP_KEY, "none");
+    setWrap(storedWrap === "braces" || storedWrap === "quotes" ? storedWrap : "none");
+    setRawItems(Array.from({ length: DEFAULT_COUNT }, () => generateUuid("v4")));
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem(VERSION_KEY, version);
