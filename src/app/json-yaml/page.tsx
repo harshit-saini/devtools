@@ -5,38 +5,22 @@ import { ArrowRightLeft, Clipboard, Eraser, FileJson } from "lucide-react";
 import ToolFullscreenButton from "@/components/ToolFullscreenButton";
 import { useToolFullscreen } from "@/components/useToolFullscreen";
 import { toYaml } from "@/lib/yaml";
+import { useDebouncedLocalStorageState } from "@/lib/useLocalStorageState";
 import styles from "./tool.module.css";
 
 const SAMPLE_JSON = '{\n  "name": "theme",\n  "colors": ["#111827", "#60a5fa"]\n}';
 const INPUT_KEY = "devtools.jsonYaml.input";
 
-function readLocalString(key: string, fallback: string): string {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
-  return window.localStorage.getItem(key) ?? fallback;
-}
-
 export default function Page() {
   const { containerRef, isFullscreen, fullscreenSupported, toggleFullscreen } = useToolFullscreen<HTMLDivElement>();
   // Initial state intentionally matches what the server renders (the hardcoded sample, not
-  // localStorage) so hydration never mismatches. Saved value is restored once, after mount, below.
-  const [jsonInput, setJsonInput] = useState(SAMPLE_JSON);
+  // localStorage) so hydration never mismatches. useDebouncedLocalStorageState restores the
+  // saved value once after mount (via its own render-phase resync rather than an effect) and
+  // debounces writes back to localStorage.
+  const [jsonInput, setJsonInput] = useDebouncedLocalStorageState(INPUT_KEY, SAMPLE_JSON, (raw) => raw, 400);
   const [yamlOutput, setYamlOutput] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-
-  useEffect(() => {
-    setJsonInput(readLocalString(INPUT_KEY, SAMPLE_JSON));
-  }, []);
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      window.localStorage.setItem(INPUT_KEY, jsonInput);
-    }, 400);
-    return () => window.clearTimeout(timeoutId);
-  }, [jsonInput]);
 
   useEffect(() => {
     if (!notice) {

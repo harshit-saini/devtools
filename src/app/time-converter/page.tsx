@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Clipboard, Clock3, RotateCcw, Zap } from "lucide-react";
 import styles from "./time-converter.module.css";
 import ToolFullscreenButton from "@/components/ToolFullscreenButton";
 import { useToolFullscreen } from "@/components/useToolFullscreen";
+import { useLocalStorageState } from "@/lib/useLocalStorageState";
 
 type EpochUnit = "auto" | "s" | "ms";
 
@@ -23,12 +24,25 @@ const RELATIVE_UNITS: { unit: Intl.RelativeTimeFormatUnit; ms: number }[] = [
   { unit: "second", ms: 1000 },
 ];
 
-function readLocalString(key: string, fallback: string): string {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
+function parseEpochUnit(raw: string): EpochUnit {
+  return raw === "s" || raw === "ms" ? raw : "auto";
+}
 
-  return window.localStorage.getItem(key) ?? fallback;
+// A ticking wall clock is inherently different between server render time and client mount time,
+// so it goes through useSyncExternalStore too: renders 0 on the server/initial hydration pass via
+// getClockServerSnapshot, then resyncs to the real time once mounted, ticking every second after -
+// all without a setState call inside a useEffect.
+function subscribeToClock(callback: () => void): () => void {
+  const intervalId = window.setInterval(callback, 1000);
+  return () => window.clearInterval(intervalId);
+}
+
+function getClockSnapshot(): number {
+  return Date.now();
+}
+
+function getClockServerSnapshot(): number {
+  return 0;
 }
 
 function detectUnit(raw: string): "s" | "ms" {
@@ -87,38 +101,14 @@ export default function TimeConverterPage() {
     useToolFullscreen<HTMLDivElement>();
 
   // Initial state below intentionally matches what the server renders (hardcoded defaults, not
-  // localStorage or Date.now()) so hydration never mismatches. Real values are set once, after
-  // mount, in the effects below.
-  const [epochInput, setEpochInput] = useState(DEFAULT_EPOCH);
-  const [epochUnit, setEpochUnit] = useState<EpochUnit>("auto");
-  const [isoInput, setIsoInput] = useState(DEFAULT_ISO);
-  const [nowMs, setNowMs] = useState(0);
+  // localStorage or Date.now()) so hydration never mismatches. useLocalStorageState/useNowMs
+  // (both useSyncExternalStore-based) resync to the real values once mounted, via their own
+  // render-phase resync rather than a setState call inside an effect.
+  const [epochInput, setEpochInput] = useLocalStorageState(EPOCH_KEY, DEFAULT_EPOCH, (raw) => raw);
+  const [epochUnit, setEpochUnit] = useLocalStorageState<EpochUnit>(UNIT_KEY, "auto", parseEpochUnit);
+  const [isoInput, setIsoInput] = useLocalStorageState(ISO_KEY, DEFAULT_ISO, (raw) => raw);
+  const nowMs = useSyncExternalStore(subscribeToClock, getClockSnapshot, getClockServerSnapshot);
   const [notice, setNotice] = useState("");
-
-  useEffect(() => {
-    setEpochInput(readLocalString(EPOCH_KEY, DEFAULT_EPOCH));
-    const storedUnit = readLocalString(UNIT_KEY, "auto");
-    setEpochUnit(storedUnit === "s" || storedUnit === "ms" ? storedUnit : "auto");
-    setIsoInput(readLocalString(ISO_KEY, DEFAULT_ISO));
-  }, []);
-
-  useEffect(() => {
-    setNowMs(Date.now());
-    const intervalId = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(intervalId);
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem(EPOCH_KEY, epochInput);
-  }, [epochInput]);
-
-  useEffect(() => {
-    window.localStorage.setItem(ISO_KEY, isoInput);
-  }, [isoInput]);
-
-  useEffect(() => {
-    window.localStorage.setItem(UNIT_KEY, epochUnit);
-  }, [epochUnit]);
 
   useEffect(() => {
     if (!notice) {

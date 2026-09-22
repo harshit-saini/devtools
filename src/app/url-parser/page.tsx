@@ -5,6 +5,7 @@ import { Clipboard, Link2, Plus, RotateCcw, Trash2 } from "lucide-react";
 import styles from "./url-parser.module.css";
 import ToolFullscreenButton from "@/components/ToolFullscreenButton";
 import { useToolFullscreen } from "@/components/useToolFullscreen";
+import { useDebouncedLocalStorageState } from "@/lib/useLocalStorageState";
 
 type EditablePart = "protocol" | "username" | "password" | "hostname" | "port" | "pathname" | "search" | "hash";
 
@@ -26,14 +27,6 @@ const FIELDS: FieldConfig[] = [
 
 const SAMPLE_URL = "https://user:pass@example.com:8443/path/to/resource?search=devtools&sort=asc&sort=desc#section-2";
 const URL_KEY = "devtools.urlParser.url";
-
-function readLocalString(key: string, fallback: string): string {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
-  return window.localStorage.getItem(key) ?? fallback;
-}
 
 function parseUrl(value: string): URL | null {
   try {
@@ -105,22 +98,13 @@ export default function UrlParserPage() {
     useToolFullscreen<HTMLDivElement>();
 
   // Initial state intentionally matches what the server renders (the hardcoded sample, not
-  // localStorage) so hydration never mismatches. Saved value is restored once, after mount, below.
-  const [urlText, setUrlText] = useState(SAMPLE_URL);
+  // localStorage) so hydration never mismatches. useDebouncedLocalStorageState restores the
+  // saved value once after mount (via its own render-phase resync rather than an effect) and
+  // debounces writes back to localStorage.
+  const [urlText, setUrlText] = useDebouncedLocalStorageState(URL_KEY, SAMPLE_URL, (raw) => raw, 300);
   const [encodeInput, setEncodeInput] = useState("hello world/devtools?");
   const [decodeInput, setDecodeInput] = useState("hello%20world%2Fdevtools%3F");
   const [notice, setNotice] = useState("");
-
-  useEffect(() => {
-    setUrlText(readLocalString(URL_KEY, SAMPLE_URL));
-  }, []);
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      window.localStorage.setItem(URL_KEY, urlText);
-    }, 300);
-    return () => window.clearTimeout(timeoutId);
-  }, [urlText]);
 
   useEffect(() => {
     if (!notice) {

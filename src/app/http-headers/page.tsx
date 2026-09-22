@@ -5,6 +5,7 @@ import { Check, Clipboard, Network, Plus, RotateCcw, Trash2, X } from "lucide-re
 import styles from "./http-headers.module.css";
 import ToolFullscreenButton from "@/components/ToolFullscreenButton";
 import { useToolFullscreen } from "@/components/useToolFullscreen";
+import { useDebouncedLocalStorageState } from "@/lib/useLocalStorageState";
 
 type HeaderPair = { name: string; value: string };
 type ParsedLine =
@@ -31,14 +32,6 @@ const SECURITY_HEADERS: { name: string; hint: string }[] = [
   { name: "Referrer-Policy", hint: "Controls how much referrer info leaks." },
   { name: "Permissions-Policy", hint: "Restricts access to browser features." },
 ];
-
-function readLocalString(key: string, fallback: string): string {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
-  return window.localStorage.getItem(key) ?? fallback;
-}
 
 function parseHeaderText(raw: string): ParsedLine[] {
   const lines = raw
@@ -104,20 +97,11 @@ export default function HttpHeadersPage() {
     useToolFullscreen<HTMLDivElement>();
 
   // Initial state intentionally matches what the server renders (the hardcoded sample, not
-  // localStorage) so hydration never mismatches. Saved value is restored once, after mount, below.
-  const [raw, setRaw] = useState(SAMPLE_RAW);
+  // localStorage) so hydration never mismatches. useDebouncedLocalStorageState restores the
+  // saved value once after mount (via its own render-phase resync rather than an effect) and
+  // debounces writes back to localStorage.
+  const [raw, setRaw] = useDebouncedLocalStorageState(RAW_KEY, SAMPLE_RAW, (rawValue) => rawValue, 300);
   const [notice, setNotice] = useState("");
-
-  useEffect(() => {
-    setRaw(readLocalString(RAW_KEY, SAMPLE_RAW));
-  }, []);
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      window.localStorage.setItem(RAW_KEY, raw);
-    }, 300);
-    return () => window.clearTimeout(timeoutId);
-  }, [raw]);
 
   useEffect(() => {
     if (!notice) {
