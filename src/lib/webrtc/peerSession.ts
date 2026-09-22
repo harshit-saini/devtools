@@ -18,7 +18,7 @@ import { MAX_NAME_LENGTH, sanitizeLine, type ControlMessage } from "./protocol";
 import { colorForPeer } from "./roomCode";
 import {
   SignalingClient,
-  type RoomPeer,
+  type JoinedPayload,
   type SignalPayload,
   type SignalingStatus,
 } from "./signaling";
@@ -171,24 +171,20 @@ export class PeerSessionController {
     this.listeners.clear();
   }
 
-  private handleJoined({
-    id,
-    room,
-    name,
-    peers,
-  }: {
-    id: string;
-    room: string;
-    name: string;
-    peers: RoomPeer[];
-  }): void {
+  private handleJoined({ id, room, name, peers, reconnected }: JoinedPayload): void {
     if (this.closed) {
       return;
     }
 
-    // A re-join (after a reconnect, or a rename) reports the same id and room. Rebuilding the mesh
-    // in that case would drop working connections, so only a genuinely new identity resets it.
-    const isSameSession = this.selfId === id && this.room === room;
+    // Whether the existing connections can be kept.
+    //
+    // A re-join on the same socket - a rename - is invisible to the other peers, so tearing the
+    // mesh down would drop working connections for nothing. A join on a *new* socket is the
+    // opposite: the server announced us to the room as an arrival, so every other peer has
+    // already destroyed its connection to us and is sitting waiting for a fresh offer. Keeping
+    // our side in that case leaves both ends stuck - they wait for an offer we think we have
+    // already made - and the link stays dead until someone leaves and rejoins by hand.
+    const isSameSession = !reconnected && this.selfId === id && this.room === room;
 
     this.selfId = id;
     this.room = room;

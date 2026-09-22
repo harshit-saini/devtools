@@ -40,8 +40,24 @@ export type SignalPayload =
  */
 export const MAX_CANDIDATES_PER_BATCH = 64;
 
+export type JoinedPayload = {
+  id: string;
+  room: string;
+  name: string;
+  peers: RoomPeer[];
+  /**
+   * True when this join arrived on a socket that replaced the one the previous join used.
+   *
+   * The two cases look identical in the payload but mean opposite things to the mesh. A re-join
+   * on the same socket (a rename) is invisible to the other peers, so their connections are
+   * intact. A join on a new socket is announced to the room as an arrival, so every other peer
+   * has already torn its connection down and is waiting for a fresh offer from us.
+   */
+  reconnected: boolean;
+};
+
 export type SignalingHandlers = {
-  onJoined(payload: { id: string; room: string; name: string; peers: RoomPeer[] }): void;
+  onJoined(payload: JoinedPayload): void;
   onPeerJoined(peer: RoomPeer): void;
   onPeerLeft(peerId: string): void;
   onSignal(from: string, payload: SignalPayload): void;
@@ -145,6 +161,9 @@ export class SignalingClient {
   /** The room to (re)join as soon as a socket is open. */
   private pendingRoom: { room: string; name: string } | null = null;
   private assignedId: string | null = null;
+  /** Incremented per socket, so a join can be attributed to the connection that carried it. */
+  private socketGeneration = 0;
+  private joinedGeneration: number | null = null;
 
   constructor(
     private readonly url: string,
@@ -176,6 +195,7 @@ export class SignalingClient {
   leave(): void {
     this.pendingRoom = null;
     this.assignedId = null;
+    this.joinedGeneration = null;
     // Otherwise a leave during a reconnect backoff leaves the timer armed, and the client
     // reconnects to a room the user has already left.
     this.clearReconnectTimer();
@@ -217,6 +237,8 @@ export class SignalingClient {
   private connect(): void {
     this.clearReconnectTimer();
     this.setStatus(this.reconnectAttempt === 0 ? "connecting" : "reconnecting");
+
+    this.socketGeneration += 1;
 
     let socket: WebSocket;
     try {
@@ -342,12 +364,18 @@ export class SignalingClient {
         const roster = Array.isArray(peers)
           ? peers.map(parseRoomPeer).filter((peer): peer is RoomPeer => peer !== null)
           : [];
+
+        const reconnected =
+          this.joinedGeneration !== null && this.joinedGeneration !== this.socketGeneration;
+        this.joinedGeneration = this.socketGeneration;
+
         this.setStatus("joined");
         this.handlers.onJoined({
           id,
           room,
           name: sanitizeLine(name, MAX_NAME_LENGTH),
           peers: roster,
+          reconnected,
         });
         break;
       }
