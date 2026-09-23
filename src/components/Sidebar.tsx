@@ -26,7 +26,10 @@ import {
   QrCode,
   Regex,
   Search,
+  Share2,
   Table2,
+  Users2,
+  Video,
   Wrench,
   Workflow,
 } from "lucide-react";
@@ -41,6 +44,10 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { name: "Dashboard", href: "/", group: "Explore", icon: House },
+
+  { name: "Peer Video Chat", href: "/meet", group: "Collaborate", icon: Video },
+  { name: "Peer File Share", href: "/file-share", group: "Collaborate", icon: Share2 },
+  { name: "Live Notepad", href: "/live-notepad", group: "Collaborate", icon: Users2 },
 
   { name: "Notepad", href: "/notepad", group: "Create", icon: NotebookPen },
   { name: "Code Editor", href: "/editor", group: "Create", icon: Code2 },
