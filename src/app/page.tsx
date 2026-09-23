@@ -21,7 +21,10 @@ import {
   QrCode,
   Regex,
   Search,
+  Share2,
   Table2,
+  Users2,
+  Video,
   Workflow,
 } from "lucide-react";
 import styles from "./page.module.css";
@@ -30,12 +33,36 @@ type ToolCard = {
   name: string;
   description: string;
   href: string;
-  category: "Create" | "Analyze";
+  category: "Create" | "Analyze" | "Collaborate";
   icon: LucideIcon;
   highlights: string[];
 };
 
 const tools: ToolCard[] = [
+  {
+    name: "Peer Video Chat",
+    description: "Browser-to-browser video calls with screen sharing and text chat, no account needed.",
+    href: "/meet",
+    category: "Collaborate",
+    icon: Video,
+    highlights: ["Screen share", "Direct P2P"],
+  },
+  {
+    name: "Peer File Share",
+    description: "Send files straight to another browser, checksummed end to end with no upload.",
+    href: "/file-share",
+    category: "Collaborate",
+    icon: Share2,
+    highlights: ["No upload", "Verified"],
+  },
+  {
+    name: "Live Notepad",
+    description: "One shared note several people edit at once, with live cursors and no server copy.",
+    href: "/live-notepad",
+    category: "Collaborate",
+    icon: Users2,
+    highlights: ["Real-time", "Live cursors"],
+  },
   {
     name: "Notepad",
     description: "Scratchpad with auto-save, quick import, export, and clipboard actions.",
@@ -182,7 +209,7 @@ const tools: ToolCard[] = [
   },
 ];
 
-const categories = ["All", "Create", "Analyze"] as const;
+const categories = ["All", "Collaborate", "Create", "Analyze"] as const;
 type Category = (typeof categories)[number];
 
 export default function Home() {

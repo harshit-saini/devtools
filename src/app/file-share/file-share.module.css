@@ -1,0 +1,257 @@
+.container {
+  height: 100%;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.recipientField {
+  display: flex;
+  align-items: center;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.dropZone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 22px 16px;
+  border-style: dashed;
+  border-width: 2px;
+  border-color: rgba(20, 36, 50, 0.18);
+  text-align: center;
+  transition: border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.dropZoneActive {
+  border-color: rgba(15, 118, 110, 0.55);
+  background: rgba(15, 118, 110, 0.08);
+}
+
+.dropIcon {
+  color: var(--accent);
+}
+
+.dropTitle {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.transfers {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  padding: 14px;
+  overflow: hidden;
+}
+
+.transfersHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sectionTitle {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.transferList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.transferRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.transferTop {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.direction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.transferNames {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.fileName {
+  font-size: 0.9rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.transferMeta {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(20, 36, 50, 0.12);
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.statusGood {
+  border-color: rgba(21, 128, 61, 0.24);
+  background: rgba(21, 128, 61, 0.12);
+  color: var(--success);
+}
+
+.statusBad {
+  border-color: rgba(190, 18, 60, 0.24);
+  background: rgba(190, 18, 60, 0.1);
+  color: var(--danger);
+}
+
+.progressTrack {
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(20, 36, 50, 0.1);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-strong));
+  transition: width 0.18s ease;
+}
+
+.transferError {
+  color: var(--danger);
+  font-size: 0.78rem;
+}
+
+.transferActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.empty {
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px dashed rgba(20, 36, 50, 0.16);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.help {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+}
+
+.notice {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  background: rgba(15, 118, 110, 0.14);
+  color: var(--accent-strong);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 1080px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .side {
+    overflow-y: visible;
+  }
+
+  .transfers {
+    overflow: visible;
+  }
+}
+
+@media (max-width: 800px) {
+  .actions {
+    justify-content: flex-start;
+  }
+}

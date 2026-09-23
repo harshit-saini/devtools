@@ -58,6 +58,9 @@ export const metadata: Metadata = {
     "code editor",
     "drawpad",
     "qr code generator",
+    "webrtc video chat",
+    "peer to peer file sharing",
+    "collaborative notepad",
   ],
   alternates: {
     canonical: "/",

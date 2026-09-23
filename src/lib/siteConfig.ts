@@ -37,6 +37,27 @@ export const siteRoutes: SiteRoute[] = [
     priority: 1,
   },
   {
+    path: "/meet",
+    name: "Peer Video Chat",
+    description: "Browser-to-browser video calls with screen sharing and text chat over WebRTC.",
+    changeFrequency: "weekly",
+    priority: 0.84,
+  },
+  {
+    path: "/file-share",
+    name: "Peer File Share",
+    description: "Send files directly between browsers with progress and end-to-end checksums.",
+    changeFrequency: "weekly",
+    priority: 0.84,
+  },
+  {
+    path: "/live-notepad",
+    name: "Live Notepad",
+    description: "Edit one shared note with other people in real time, peer-to-peer.",
+    changeFrequency: "weekly",
+    priority: 0.84,
+  },
+  {
     path: "/notepad",
     name: "Notepad Tool",
     description: "Auto-saving browser notepad for quick developer notes and snippets.",
